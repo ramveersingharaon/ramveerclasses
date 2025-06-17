@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export default function HomePage() {
   const handleAppClick = () => {
-    alert("You can Download Comming Soon");
+    alert("You can Download Soon");
   };
 
   return (
