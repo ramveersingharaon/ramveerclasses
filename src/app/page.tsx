@@ -39,7 +39,7 @@ export default function HomePage() {
             rel="noopener noreferrer"
             className="bg-white text-blue-600 px-6 py-3 rounded-md font-semibold hover:bg-gray-100 transition"
           >
-            YouTube पर क्लास देखें
+            Online क्लास देखें
           </a>
           <a
             href="https://chat.whatsapp.com/EL1PtykUXGsCK06hBqEaR4"
