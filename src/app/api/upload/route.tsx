@@ -1,6 +1,6 @@
 // app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from 'cloudinary';
+import { v2 as cloudinary  } from 'cloudinary';
 // import { ApiResourceType } from 'cloudinary';
 
 cloudinary.config({
