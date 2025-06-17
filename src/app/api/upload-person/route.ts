@@ -13,6 +13,18 @@ function isValidType(type: string | null): type is 'team' | 'mentor' {
   return type === 'team' || type === 'mentor';
 }
 
+// Define expected structure of Cloudinary resources
+type CloudinaryImageResource = {
+  secure_url: string;
+  public_id: string;
+  context?: {
+    custom?: {
+      name?: string;
+      role?: string;
+    };
+  };
+};
+
 export async function GET(req: NextRequest) {
   try {
     const type = req.nextUrl.searchParams.get('type');
@@ -28,7 +40,7 @@ export async function GET(req: NextRequest) {
       max_results: 100,
     });
 
-    const people = result.resources.map((file: any) => ({
+    const people = (result.resources as CloudinaryImageResource[]).map((file) => ({
       name: file.context?.custom?.name || null,
       role: file.context?.custom?.role || null,
       url: file.secure_url,
@@ -44,7 +56,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, role, fileBase64, type } = await req.json();
+    const { name, role, fileBase64, type }: {
+      name: string;
+      role: string;
+      fileBase64: string;
+      type: string;
+    } = await req.json();
 
     if (!name || !role || !fileBase64 || !isValidType(type)) {
       return NextResponse.json(
@@ -78,18 +95,19 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { public_id, type } = await req.json();
+    const { public_id, type }: { public_id: string; type?: string } = await req.json();
 
     if (!public_id) {
       return NextResponse.json({ success: false, error: 'Missing public_id' }, { status: 400 });
     }
 
-    // Optional: validate type if needed
     if (type && !isValidType(type)) {
       return NextResponse.json({ success: false, error: 'Invalid type' }, { status: 400 });
     }
 
-    const result = await cloudinary.uploader.destroy(public_id, { resource_type: 'image' });
+    const result: { result: string } = await cloudinary.uploader.destroy(public_id, {
+      resource_type: 'image',
+    });
 
     if (result.result === 'ok') {
       return NextResponse.json({ success: true });

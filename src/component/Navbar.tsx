@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
@@ -42,10 +43,13 @@ export default function Navbar() {
         {/* Left Section: Logo + Links */}
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center">
-            {/* Logo Image */}
-            <img
-              src="logo.png"  // <-- Yahan apni logo ki image ka path daalein
+            {/* Optimized Logo Image */}
+            <Image
+              src="/logo.png" // Make sure this path is correct and file exists in /public
               alt="Logo"
+              width={100}
+              height={40}
+              priority
               className="h-10 w-auto"
             />
           </Link>

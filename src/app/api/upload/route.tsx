@@ -1,12 +1,32 @@
 // app/api/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary, UploadApiResponse, UploadApiErrorResponse } from 'cloudinary';
+// import { ApiResourceType } from 'cloudinary';
 
 cloudinary.config({
   cloud_name: 'dcxrzhoaj',
   api_key: '971368918344559',
   api_secret: 'mxUsn9CM-CKu07TpiOa_qdW4z4U',
 });
+
+type Metadata = {
+  chapterName: string;
+  chapterNumber: string;
+  className: string;
+};
+
+type CloudinaryResource = {
+  secure_url: string;
+  public_id: string;
+  context?: {
+    custom: {
+      chapterName?: string;
+      chapterNumber?: string;
+      className?: string;
+    };
+  };
+  created_at: string;
+};
 
 // Extract chapter number from public ID
 const getChapterNumber = (publicId: string): string => {
@@ -15,18 +35,24 @@ const getChapterNumber = (publicId: string): string => {
 };
 
 // Parse context metadata
-const parseMetadata = (context: any) => {
-  if (!context) return { chapterName: '', chapterNumber: '', className: '' };
+const parseMetadata = (context: CloudinaryResource['context']): Metadata => {
+  if (!context?.custom) return { chapterName: '', chapterNumber: '', className: '' };
   return {
-    chapterName: context.chapterName || '',
-    chapterNumber: context.chapterNumber || '',
-    className: context.className || '',
+    chapterName: context.custom.chapterName || '',
+    chapterNumber: context.custom.chapterNumber || '',
+    className: context.custom.className || '',
   };
 };
 
 export async function POST(req: NextRequest) {
   try {
-    const data = await req.json();
+    const data: {
+      chapterNumber: string;
+      chapterName: string;
+      className: string;
+      fileBase64: string;
+    } = await req.json();
+
     const { chapterNumber, chapterName, className, fileBase64 } = data;
 
     if (!chapterNumber || !chapterName || !className || !fileBase64) {
@@ -54,10 +80,11 @@ export async function POST(req: NextRequest) {
       chapterName,
       className,
     });
-  } catch (error: any) {
-    console.error('Upload error:', error);
+  } catch (error) {
+    const err = error as Error;
+    console.error('Upload error:', err);
     return NextResponse.json(
-      { success: false, error: error.message || 'Upload failed' },
+      { success: false, error: err.message || 'Upload failed' },
       { status: 500 }
     );
   }
@@ -70,13 +97,13 @@ export async function GET() {
       prefix: 'notes/',
       resource_type: 'raw',
       context: true,
-      max_results: 100
+      max_results: 100,
     });
 
-    const notes = result.resources
-      .filter((file: any) => file.public_id.includes('.pdf'))
-      .map((file: any) => {
-        const metadata = parseMetadata(file.context?.custom);
+    const notes = (result.resources as CloudinaryResource[])
+      .filter((file) => file.public_id.includes('.pdf'))
+      .map((file) => {
+        const metadata = parseMetadata(file.context);
         const chapterNumber = metadata.chapterNumber || getChapterNumber(file.public_id);
 
         return {
@@ -85,41 +112,49 @@ export async function GET() {
           chapterNumber,
           chapterName: metadata.chapterName || `Chapter ${chapterNumber}`,
           className: metadata.className || '',
-          uploadedAt: file.created_at
+          uploadedAt: file.created_at,
         };
       });
 
-    notes.sort((a: any, b: any) => 
+    notes.sort((a, b) =>
       parseInt(a.chapterNumber) - parseInt(b.chapterNumber)
     );
 
     return NextResponse.json(notes);
-  } catch (error: any) {
-    console.error('Fetch error:', error);
+  } catch (error) {
+    const err = error as Error;
+    console.error('Fetch error:', err);
     return NextResponse.json([], { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
   try {
-    const body = await req.text();
-    const { public_id } = JSON.parse(body);
+    const bodyText = await req.text();
+    const { public_id }: { public_id: string } = JSON.parse(bodyText);
 
     if (!public_id) {
-      return NextResponse.json({ success: false, error: "Missing public_id" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'Missing public_id' },
+        { status: 400 }
+      );
     }
 
-    const result = await cloudinary.uploader.destroy(public_id, {
+    const result: { result: string } = await cloudinary.uploader.destroy(public_id, {
       resource_type: 'raw',
     });
 
-    if (result.result !== "ok") {
-      return NextResponse.json({ success: false, error: "Delete failed on Cloudinary" }, { status: 500 });
+    if (result.result !== 'ok') {
+      return NextResponse.json(
+        { success: false, error: 'Delete failed on Cloudinary' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error("Delete error:", err);
+  } catch (error) {
+    const err = error as Error;
+    console.error('Delete error:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

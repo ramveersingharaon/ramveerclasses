@@ -19,11 +19,11 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
-    } catch (err: any) {
-      console.error("Login error:", err.code);
+    } catch (err) {
+      const errorCode = (err as { code?: string })?.code;
+      console.error("Login error:", errorCode);
 
-      // User-friendly error messages
-      switch (err.code) {
+      switch (errorCode) {
         case "auth/invalid-email":
           setError("❌ Email format galat hai");
           break;
