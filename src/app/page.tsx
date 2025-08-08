@@ -136,8 +136,9 @@ export default function HomePage() {
         const notesData: Note[] = await notesRes.json();
         const videosData: Video[] = await videosRes.json();
 
-        const notes = notesData.map((note) => ({ ...note, type: 'note' as 'note' }));
-        const videos = videosData.map((video) => ({ ...video, type: 'video' as 'video' }));
+        // Type assertion `as Note` and `as Video` is used here
+        const notes = notesData.map((note) => ({ ...note, type: 'note' }) as Note);
+        const videos = videosData.map((video) => ({ ...video, type: 'video' }) as Video);
 
         const combinedContent = [...notes, ...videos].sort((a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -191,30 +192,31 @@ export default function HomePage() {
     if (!confirm("Are you sure you want to delete this content?")) return;
     try {
       let endpoint = '';
-      let publicIdToDelete = '';
+      let bodyData: { publicId: string } | { thumbnailPublicId: string };
+      
       if (item.type === 'note') {
         endpoint = "/api/upload";
-        publicIdToDelete = item.public_id;
+        bodyData = { publicId: item.public_id };
       } else {
         // It's a video
         endpoint = "/api/upload-video";
-        publicIdToDelete = item.thumbnailPublicId;
+        bodyData = { thumbnailPublicId: item.thumbnailPublicId };
       }
 
       const res = await fetch(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thumbnailPublicId: publicIdToDelete }), // Use thumbnailPublicId for video deletion
+        body: JSON.stringify(bodyData), // Use correct body based on content type
       });
       if (!res.ok) throw new Error("Delete failed");
 
       // Update the state based on the type of content being deleted
       setAllContent((prev) => prev.filter((content) => {
           if (content.type === 'note' && item.type === 'note') {
-              return content.public_id !== publicIdToDelete;
+              return content.public_id !== item.public_id;
           }
           if (content.type === 'video' && item.type === 'video') {
-              return content.thumbnailPublicId !== publicIdToDelete;
+              return content.thumbnailPublicId !== item.thumbnailPublicId;
           }
           return true;
       }));
