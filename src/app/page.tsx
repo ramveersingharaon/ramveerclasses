@@ -133,11 +133,11 @@ export default function HomePage() {
           fetch("/api/upload-video"),
         ]);
 
-        const notesData = await notesRes.json();
-        const videosData = await videosRes.json();
+        const notesData: Note[] = await notesRes.json();
+        const videosData: Video[] = await videosRes.json();
 
-        const notes: Note[] = notesData.map((note: any) => ({ ...note, type: 'note' }));
-        const videos: Video[] = videosData.map((video: any) => ({ ...video, type: 'video' }));
+        const notes = notesData.map((note) => ({ ...note, type: 'note' as 'note' }));
+        const videos = videosData.map((video) => ({ ...video, type: 'video' as 'video' }));
 
         const combinedContent = [...notes, ...videos].sort((a, b) =>
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -191,25 +191,34 @@ export default function HomePage() {
     if (!confirm("Are you sure you want to delete this content?")) return;
     try {
       let endpoint = '';
-      let publicId = '';
+      let publicIdToDelete = '';
       if (item.type === 'note') {
         endpoint = "/api/upload";
-        publicId = item.public_id;
+        publicIdToDelete = item.public_id;
       } else {
         // It's a video
         endpoint = "/api/upload-video";
-        publicId = item.thumbnailPublicId;
+        publicIdToDelete = item.thumbnailPublicId;
       }
 
       const res = await fetch(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ publicId }),
+        body: JSON.stringify({ thumbnailPublicId: publicIdToDelete }), // Use thumbnailPublicId for video deletion
       });
       if (!res.ok) throw new Error("Delete failed");
-      setAllContent((prev) => prev.filter((content) => 
-        content.type === 'note' ? content.public_id !== publicId : content.thumbnailPublicId !== publicId
-      ));
+
+      // Update the state based on the type of content being deleted
+      setAllContent((prev) => prev.filter((content) => {
+          if (content.type === 'note' && item.type === 'note') {
+              return content.public_id !== publicIdToDelete;
+          }
+          if (content.type === 'video' && item.type === 'video') {
+              return content.thumbnailPublicId !== publicIdToDelete;
+          }
+          return true;
+      }));
+      
       alert("Content deleted successfully!");
     } catch (error) {
       alert("Failed to delete content");
@@ -394,7 +403,7 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
               {/* Play Button Icon */}
               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 opacity-100 group-hover:opacity-100 transition-opacity duration-300">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-white" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
                   </svg>
               </div>
             </button>

@@ -419,7 +419,6 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "../../../firebaseConfig";
 import Image from "next/image";
-import { ImSpinner2 } from "react-icons/im";
 
 type Student = {
   id: string;

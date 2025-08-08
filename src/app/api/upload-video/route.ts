@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
 
     // Upload the thumbnail image buffer to Cloudinary
-    const thumbnailUploadResult = await new Promise((resolve, reject) => {
+    const thumbnailUploadResult: CloudinaryVideoResource = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
           resource_type: 'image',
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
         },
         (error, result) => {
           if (error) reject(error);
-          resolve(result);
+          resolve(result as CloudinaryVideoResource);
         }
       ).end(thumbnailBuffer);
     });
@@ -108,8 +108,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       youtubeUrl: youtubeUrl,
-      thumbnailUrl: (thumbnailUploadResult as any).secure_url,
-      thumbnailPublicId: (thumbnailUploadResult as any).public_id,
+      thumbnailUrl: thumbnailUploadResult.secure_url,
+      thumbnailPublicId: thumbnailUploadResult.public_id,
     });
   } catch (error) {
     const err = error as Error;
@@ -158,7 +158,10 @@ export async function GET() {
 // DELETE handler to delete a video thumbnail and its metadata
 export async function DELETE(req: NextRequest) {
   try {
-    const { thumbnailPublicId }: { thumbnailPublicId: string } = await req.json();
+    type DeleteRequest = {
+      thumbnailPublicId: string;
+    };
+    const { thumbnailPublicId }: DeleteRequest = await req.json();
 
     if (!thumbnailPublicId) {
       return NextResponse.json(

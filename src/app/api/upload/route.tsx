@@ -161,7 +161,6 @@
 
 
 // app/api/upload/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -171,13 +170,14 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// New types for better code
 type Metadata = {
   chapterName: string;
   chapterNumber: string;
   className: string;
 };
 
-type CloudinaryResource = {
+type CloudinaryUploadResult = {
   secure_url: string;
   public_id: string;
   context?: {
@@ -190,8 +190,14 @@ type CloudinaryResource = {
   created_at: string;
 };
 
+type CloudinaryImageResource = {
+  secure_url: string;
+  public_id: string;
+  created_at: string;
+};
+
 // Parse context metadata
-const parseMetadata = (context: CloudinaryResource['context']): Metadata => {
+const parseMetadata = (context: CloudinaryUploadResult['context']): Metadata => {
   if (!context?.custom) return { chapterName: '', chapterNumber: '', className: '' };
   return {
     chapterName: context.custom.chapterName || '',
@@ -220,24 +226,24 @@ export async function POST(req: NextRequest) {
     const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
 
     // Upload PDF
-    const pdfUploadResult = await new Promise((resolve, reject) => {
+    const pdfUploadResult: CloudinaryUploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
           resource_type: 'raw',
           folder: 'notes',
-          public_id: `chapter_${chapterNumber}`, // Use chapter number as public ID
+          public_id: `chapter_${chapterNumber}`,
           overwrite: true,
           context: `chapterName=${chapterName}|chapterNumber=${chapterNumber}|className=${className}`,
         },
         (error, result) => {
           if (error) reject(error);
-          resolve(result);
+          resolve(result as CloudinaryUploadResult);
         }
       ).end(pdfBuffer);
     });
 
     // Upload Image
-    const imageUploadResult = await new Promise((resolve, reject) => {
+    const imageUploadResult: CloudinaryImageResource = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
         {
           resource_type: 'image',
@@ -247,17 +253,17 @@ export async function POST(req: NextRequest) {
         },
         (error, result) => {
           if (error) reject(error);
-          resolve(result);
+          resolve(result as CloudinaryImageResource);
         }
       ).end(imageBuffer);
     });
 
     return NextResponse.json({
       success: true,
-      pdfUrl: (pdfUploadResult as any).secure_url,
-      pdfPublicId: (pdfUploadResult as any).public_id,
-      imageUrl: (imageUploadResult as any).secure_url,
-      imagePublicId: (imageUploadResult as any).public_id,
+      pdfUrl: pdfUploadResult.secure_url,
+      pdfPublicId: pdfUploadResult.public_id,
+      imageUrl: imageUploadResult.secure_url,
+      imagePublicId: imageUploadResult.public_id,
     });
   } catch (error) {
     const err = error as Error;
@@ -286,13 +292,13 @@ export async function GET() {
       max_results: 100,
     });
     
-    const imagesMap = new Map();
-    imagesResult.resources.forEach((img: any) => {
+    const imagesMap = new Map<string, CloudinaryImageResource>();
+    (imagesResult.resources as CloudinaryImageResource[]).forEach((img) => {
       const publicId = img.public_id.replace('notes_thumbnails/', '');
       imagesMap.set(publicId.replace('_thumb', ''), img);
     });
 
-    const notes = (pdfsResult.resources as CloudinaryResource[])
+    const notes = (pdfsResult.resources as CloudinaryUploadResult[])
       .map((file) => {
         const metadata = parseMetadata(file.context);
         const basePublicId = file.public_id.replace('notes/', '');
@@ -306,12 +312,11 @@ export async function GET() {
           className: metadata.className,
           thumbnailUrl: image ? image.secure_url : null,
           thumbnailPublicId: image ? image.public_id : null,
-          created_at: file.created_at, // Add created_at to the note object
+          created_at: file.created_at,
         };
       })
-      .filter(note => note.className === "10" || note.className === "12"); // Filter before sorting
+      .filter(note => note.className === "10" || note.className === "12");
 
-    // Sort notes by created_at in descending order (latest first)
     notes.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return NextResponse.json(notes);
@@ -324,7 +329,11 @@ export async function GET() {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { public_id, thumbnailPublicId }: { public_id: string; thumbnailPublicId: string } = await req.json();
+    type DeleteRequest = {
+      public_id: string;
+      thumbnailPublicId: string;
+    };
+    const { public_id, thumbnailPublicId }: DeleteRequest = await req.json();
 
     if (!public_id) {
       return NextResponse.json(
@@ -333,12 +342,10 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // Delete PDF
     const result = await cloudinary.uploader.destroy(public_id, {
       resource_type: 'raw',
     });
 
-    // Delete thumbnail image if it exists
     if (thumbnailPublicId) {
       await cloudinary.uploader.destroy(thumbnailPublicId, {
         resource_type: 'image',
