@@ -69,11 +69,12 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { app } from '../../firebaseConfig';
+import { IoIosArrowBack, IoIosArrowForward } from 'react-icons/io';
 
 // Define a union type for different content types
 type Content = Note | Video;
@@ -110,10 +111,20 @@ const getYouTubeId = (url: string): string | null => {
 
 export default function HomePage() {
   const [allContent, setAllContent] = useState<Content[]>([]);
+  const [filteredContent, setFilteredContent] = useState<Content[]>([]);
   const [displayedContent, setDisplayedContent] = useState<Content[]>([]);
   const [fetching, setFetching] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string>('all-all');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Staggered loading state
+  const [itemsToDisplay, setItemsToDisplay] = useState(0);
+
+  // Dragging state
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollPosition, setScrollPosition] = useState(0);
 
   // Firebase auth check
   useEffect(() => {
@@ -128,6 +139,7 @@ export default function HomePage() {
   useEffect(() => {
     const fetchContent = async () => {
       try {
+        setFetching(true);
         const [notesRes, videosRes] = await Promise.all([
           fetch("/api/upload"),
           fetch("/api/upload-video"),
@@ -136,7 +148,6 @@ export default function HomePage() {
         const notesData: Note[] = await notesRes.json();
         const videosData: Video[] = await videosRes.json();
 
-        // Type assertion `as Note` and `as Video` is used here
         const notes = notesData.map((note) => ({ ...note, type: 'note' }) as Note);
         const videos = videosData.map((video) => ({ ...video, type: 'video' }) as Video);
 
@@ -145,7 +156,6 @@ export default function HomePage() {
         );
         
         setAllContent(combinedContent);
-        setDisplayedContent(combinedContent);
       } catch (error) {
         console.error("Error fetching content:", error);
       } finally {
@@ -155,20 +165,32 @@ export default function HomePage() {
     fetchContent();
   }, []);
   
-  // Handle filter changes
+  // Handle filter changes and reset staggered loading
   useEffect(() => {
     const [contentType, className] = activeFilter.split('-');
 
-    let filteredContent = allContent;
+    let newFilteredContent = allContent;
     if (contentType !== 'all') {
-      filteredContent = filteredContent.filter(item => item.type === contentType);
+      newFilteredContent = newFilteredContent.filter(item => item.type === contentType);
     }
     if (className !== 'all') {
-      filteredContent = filteredContent.filter(item => item.className === className);
+      newFilteredContent = newFilteredContent.filter(item => item.className === className);
     }
 
-    setDisplayedContent(filteredContent);
+    setFilteredContent(newFilteredContent);
+    setItemsToDisplay(0); // Reset the staggered loading counter
   }, [activeFilter, allContent]);
+
+  // Handle staggered loading effect
+  useEffect(() => {
+    if (itemsToDisplay < filteredContent.length) {
+      const timer = setTimeout(() => {
+        setDisplayedContent(filteredContent.slice(0, itemsToDisplay + 1));
+        setItemsToDisplay(prev => prev + 1);
+      }, 100); // 100ms delay between each card load
+      return () => clearTimeout(timer);
+    }
+  }, [itemsToDisplay, filteredContent]);
 
   const handleDownload = async (url: string, chapterName: string) => {
     try {
@@ -192,13 +214,12 @@ export default function HomePage() {
     if (!confirm("Are you sure you want to delete this content?")) return;
     try {
       let endpoint = '';
-      let bodyData: { publicId: string } | { thumbnailPublicId: string };
+      let bodyData: any;
       
       if (item.type === 'note') {
         endpoint = "/api/upload";
-        bodyData = { publicId: item.public_id };
+        bodyData = { public_id: item.public_id, thumbnailPublicId: item.thumbnailPublicId };
       } else {
-        // It's a video
         endpoint = "/api/upload-video";
         bodyData = { thumbnailPublicId: item.thumbnailPublicId };
       }
@@ -206,19 +227,18 @@ export default function HomePage() {
       const res = await fetch(endpoint, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyData), // Use correct body based on content type
+        body: JSON.stringify(bodyData),
       });
       if (!res.ok) throw new Error("Delete failed");
 
-      // Update the state based on the type of content being deleted
       setAllContent((prev) => prev.filter((content) => {
-          if (content.type === 'note' && item.type === 'note') {
-              return content.public_id !== item.public_id;
-          }
-          if (content.type === 'video' && item.type === 'video') {
-              return content.thumbnailPublicId !== item.thumbnailPublicId;
-          }
-          return true;
+        if (content.type === 'note' && item.type === 'note') {
+          return content.public_id !== item.public_id;
+        }
+        if (content.type === 'video' && item.type === 'video') {
+          return content.thumbnailPublicId !== item.thumbnailPublicId;
+        }
+        return true;
       }));
       
       alert("Content deleted successfully!");
@@ -228,92 +248,185 @@ export default function HomePage() {
     }
   };
 
+  const scrollTagsLeft = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: -200, behavior: 'smooth' });
+    }
+  };
+
+  const scrollTagsRight = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
+
+  const handleTagClick = (filterValue: string) => {
+    setActiveFilter(filterValue);
+  };
+  
+  // Dragging event handlers
+  const onMouseDown = (e: React.MouseEvent) => {
+    if (scrollContainerRef.current) {
+      setIsDragging(true);
+      setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
+      setScrollPosition(scrollContainerRef.current.scrollLeft);
+    }
+  };
+
+  const onMouseLeave = () => {
+    setIsDragging(false);
+  };
+
+  const onMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 1;
+    scrollContainerRef.current.scrollLeft = scrollPosition - walk;
+  };
+
+  // Touch event handlers for mobile
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (scrollContainerRef.current) {
+      setStartX(e.touches[0].pageX - scrollContainerRef.current.offsetLeft);
+      setScrollPosition(scrollContainerRef.current.scrollLeft);
+      setIsDragging(true);
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging || !scrollContainerRef.current) return;
+    const x = e.touches[0].pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 1;
+    scrollContainerRef.current.scrollLeft = scrollPosition - walk;
+  };
+
+  const onTouchEnd = () => {
+    setIsDragging(false);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-800">
-      
-      {/* New Hero Section for Homepage */}
-      <section className="bg-blue-600 text-white py-20 px-4 sm:px-6 lg:px-8 text-center">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-4 animate-fadeIn">
-            Ramveer Classes
-          </h1>
-          <p className="text-lg sm:text-xl mb-8 animate-fadeIn delay-100">
-            Dedicated to providing quality education to UP Board students. Access notes and video lectures to excel in your studies.
-          </p>
-          <Link href="/download-app" passHref>
-            <button className="bg-white text-blue-600 font-bold py-3 px-8 rounded-full text-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 animate-fadeIn delay-200">
-              Download Ramveer Classes App
+    <>
+      <style jsx>{`
+        .hide-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .stagger-fade-in {
+          animation: fadeIn 0.5s ease-in-out forwards;
+          opacity: 0;
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+      <div className="min-h-screen bg-gray-100 text-gray-800">
+        
+        <section className="bg-blue-600 text-white py-20 px-4 sm:px-6 lg:px-8 text-center">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-4 animate-fadeIn">
+              Ramveer Classes
+            </h1>
+            <p className="text-lg sm:text-xl mb-8 animate-fadeIn delay-100">
+              Dedicated to providing quality education to UP Board students. Access notes and video lectures to excel in your studies.
+            </p>
+            <Link href="/download-app" passHref>
+              <button className="bg-white text-blue-600 font-bold py-3 px-8 rounded-full text-lg shadow-lg hover:bg-gray-100 transition duration-300 transform hover:scale-105 animate-fadeIn delay-200">
+                Download Ramveer Classes App
+              </button>
+            </Link>
+          </div>
+        </section>
+
+        <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          <h2 className="text-3xl sm:text-4xl font-bold text-center text-blue-800 mb-6">Latest Class Content</h2>
+
+          {/* Scrollable Filter Tags Section */}
+          <div className="relative flex items-center mb-8">
+            <button onClick={scrollTagsLeft} className="p-2 bg-white rounded-full shadow-md z-10 hidden md:block">
+              <IoIosArrowBack />
             </button>
-          </Link>
-        </div>
-      </section>
-
-      <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <h2 className="text-3xl sm:text-4xl font-bold text-center text-blue-800 mb-6">Latest Class Content</h2>
-
-        {/* Filter Buttons - Responsive and modern UI */}
-        <div className="flex justify-center flex-wrap gap-3 mb-8">
-          <button
-            onClick={() => setActiveFilter('all-all')}
-            className={`flex-grow sm:flex-grow-0 px-6 py-3 rounded-full font-semibold text-lg transition-colors duration-300 shadow-md ${
-              activeFilter === 'all-all' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            All Content
-          </button>
-          <button
-            onClick={() => setActiveFilter('note-10')}
-            className={`flex-grow sm:flex-grow-0 px-6 py-3 rounded-full font-semibold text-lg transition-colors duration-300 shadow-md ${
-              activeFilter === 'note-10' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            Notes 10th
-          </button>
-          <button
-            onClick={() => setActiveFilter('note-12')}
-            className={`flex-grow sm:flex-grow-0 px-6 py-3 rounded-full font-semibold text-lg transition-colors duration-300 shadow-md ${
-              activeFilter === 'note-12' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            Notes 12th
-          </button>
-          <button
-            onClick={() => setActiveFilter('video-10')}
-            className={`flex-grow sm:flex-grow-0 px-6 py-3 rounded-full font-semibold text-lg transition-colors duration-300 shadow-md ${
-              activeFilter === 'video-10' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            Videos 10th
-          </button>
-          <button
-            onClick={() => setActiveFilter('video-12')}
-            className={`flex-grow sm:flex-grow-0 px-6 py-3 rounded-full font-semibold text-lg transition-colors duration-300 shadow-md ${
-              activeFilter === 'video-12' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-            }`}
-          >
-            Videos 12th
-          </button>
-        </div>
-
-        {fetching ? (
-          <div className="flex justify-center items-center h-40">
-            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <div 
+              ref={scrollContainerRef} 
+              className="flex flex-nowrap overflow-x-auto scroll-smooth hide-scrollbar gap-3 px-2 cursor-grab active:cursor-grabbing"
+              onMouseDown={onMouseDown}
+              onMouseLeave={onMouseLeave}
+              onMouseUp={onMouseUp}
+              onMouseMove={onMouseMove}
+              onTouchStart={onTouchStart}
+              onTouchEnd={onTouchEnd}
+              onTouchMove={onTouchMove}
+            >
+              <button
+                onClick={() => handleTagClick('all-all')}
+                className={`flex-shrink-0 px-4 py-2 rounded-full font-semibold text-sm transition-colors duration-300 shadow-md ${
+                  activeFilter === 'all-all' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                }`}
+              >
+                All Content
+              </button>
+              {['6', '7', '8', '9', '10', '11', '12'].map(cls => (
+                <React.Fragment key={cls}>
+                  <button
+                    onClick={() => handleTagClick(`note-${cls}`)}
+                    className={`flex-shrink-0 px-4 py-2 rounded-full font-semibold text-sm transition-colors duration-300 shadow-md ${
+                      activeFilter === `note-${cls}` ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                    }`}
+                  >
+                    Notes {cls}th
+                  </button>
+                  <button
+                    onClick={() => handleTagClick(`video-${cls}`)}
+                    className={`flex-shrink-0 px-4 py-2 rounded-full font-semibold text-sm transition-colors duration-300 shadow-md ${
+                      activeFilter === `video-${cls}` ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
+                    }`}
+                  >
+                    Videos {cls}th
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
+            <button onClick={scrollTagsRight} className="p-2 bg-white rounded-full shadow-md z-10 hidden md:block">
+              <IoIosArrowForward />
+            </button>
           </div>
-        ) : displayedContent.length === 0 ? (
-          <p className="text-center text-gray-500 text-lg mt-10">No content found for this selection.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {displayedContent.map((item) => (
-              item.type === 'note' ? (
-                <NoteCard key={item.public_id} note={item} isAdmin={isAdmin} onDelete={() => handleDelete(item)} onDownload={handleDownload} />
-              ) : (
-                <VideoCard key={item.thumbnailPublicId} video={item} isAdmin={isAdmin} onDelete={() => handleDelete(item)} />
-              )
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+
+          {fetching && filteredContent.length === 0 ? (
+            <div className="flex justify-center items-center h-40">
+              <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : displayedContent.length === 0 && !fetching ? (
+            <p className="text-center text-gray-500 text-lg mt-10">No content found for this selection.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {displayedContent.map((item, index) => (
+                <div key={index} style={{ animationDelay: `${index * 50}ms` }} className="stagger-fade-in">
+                  {item.type === 'note' ? (
+                    <NoteCard note={item} isAdmin={isAdmin} onDelete={() => handleDelete(item)} onDownload={handleDownload} />
+                  ) : (
+                    <VideoCard video={item} isAdmin={isAdmin} onDelete={() => handleDelete(item)} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </>
   );
 }
 
@@ -365,10 +478,8 @@ function NoteCard({ note, isAdmin, onDelete, onDownload }: { note: Note, isAdmin
 function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolean, onDelete: () => void }) {
   const [isPlaying, setIsPlaying] = useState(false);
   
-  // Use the new, robust function to get the video ID
   const videoId = getYouTubeId(video.youtubeUrl);
 
-  // Generate a default YouTube thumbnail URL if one is not provided
   const thumbnailUrl = video.thumbnailUrl || (videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : null);
 
   const handlePlay = () => {
@@ -383,7 +494,6 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
     <div className="bg-white rounded-xl shadow-lg overflow-hidden transform transition-transform duration-300 hover:scale-105 hover:shadow-2xl flex flex-col">
       <div className="relative w-full h-48 bg-gray-100 flex items-center justify-center">
         {isPlaying && videoId ? (
-          // Show the iframe when isPlaying is true and videoId is valid
           <iframe
             className="absolute top-0 left-0 w-full h-full"
             src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
@@ -392,7 +502,6 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
             allowFullScreen
           />
         ) : (
-          // Show the thumbnail and play button when not playing
           thumbnailUrl ? (
             <button onClick={handlePlay} className="absolute inset-0 w-full h-full group focus:outline-none">
               <Image
@@ -402,7 +511,6 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
                 objectFit="cover"
                 priority
               />
-              {/* Play Button Icon */}
               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 opacity-100 group-hover:opacity-100 transition-opacity duration-300">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-white" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
