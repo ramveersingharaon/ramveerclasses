@@ -19,10 +19,10 @@ const DownloadAppPage = () => {
           Coming Soon! ✨
         </h1>
         <p className="text-xl text-gray-600 mb-6">
-          Our mobile app is currently under development. We're working hard to bring you the best experience possible.
+          Our mobile app is currently under development. We&apos;re working hard to bring you the best experience possible.
         </p>
         <p className="text-md text-gray-500 mb-8">
-          Stay tuned for updates! We'll notify you as soon as the app is ready for download.
+          Stay tuned for updates! We&apos;ll notify you as soon as the app is ready for download.
         </p>
         
         {/* Call to action (Optional, can be a link to mailing list or social media) */}
