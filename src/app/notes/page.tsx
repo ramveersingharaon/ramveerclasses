@@ -50,7 +50,7 @@ export default function NotesPage() {
         const data = res.ok ? await res.json() : { notes: [] };
         
         if (Array.isArray(data.notes)) {
-          const notes = data.notes.map((note: any) => ({ ...note, type: 'note' }) as Note);
+         const notes = data.notes.map((note: Note) => ({ ...note, type: 'note' }) as Note);
           setAllNotes(notes);
         }
       } catch (error) {

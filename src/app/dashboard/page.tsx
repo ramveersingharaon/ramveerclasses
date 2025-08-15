@@ -139,9 +139,9 @@ export default function DashboardPage() {
       } else {
         alert("Video upload failed: " + (data.error || JSON.stringify(data)));
       }
-    } catch (error: any) {
+} catch (error: unknown) {
       console.error("Video upload error:", error);
-      alert("Something went wrong during video upload: " + (error.message || JSON.stringify(error)));
+      alert("Something went wrong during video upload: " + (JSON.stringify(error)));
       setLoading(false);
     }
   };

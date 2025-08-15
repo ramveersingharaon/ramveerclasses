@@ -8,7 +8,21 @@ cloudinary.v2.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export const GET = async (req: NextRequest) => {
+
+interface CloudinaryResource {
+  secure_url: string;
+  public_id: string;
+  created_at: string;
+  metadata?: {
+    className?: string;
+    subjectName?: string;
+    chapterName?: string;
+    chapterNumber?: string;
+    description?: string;
+  };
+}
+
+export const GET = async (_req: NextRequest) => {
   try {
     const { resources } = await cloudinary.v2.search
       .expression('folder:notes-pdfs')
@@ -17,7 +31,7 @@ export const GET = async (req: NextRequest) => {
       .max_results(50)
       .execute();
 
-    const notes = resources.map((resource: any) => ({
+  const notes = resources.map((resource: CloudinaryResource) => ({
       url: resource.secure_url,
       publicId: resource.public_id,
       className: resource.metadata?.className || '',
@@ -57,7 +71,7 @@ export const POST = async (req: NextRequest) => {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
 
-    const result: any = await new Promise((resolve, reject) => {
+     const result = await new Promise<any>((resolve, reject) => {
       cloudinary.v2.uploader
         .upload_stream(
           {

@@ -174,36 +174,59 @@ export async function GET() {
 }
 
 // DELETE handler to delete a video thumbnail and its metadata
+// app/api/upload-video/route.ts
+// ... (rest of your code)
+
+// DELETE handler to delete a video thumbnail and its metadata
 export async function DELETE(req: NextRequest) {
-  try {
-    type DeleteRequest = {
-      thumbnailPublicId: string;
-    };
-    const { thumbnailPublicId }: DeleteRequest = await req.json();
+  try {
+    // Get the youtubeUrl from the URL query parameters
+    const youtubeUrl = req.nextUrl.searchParams.get("youtubeUrl");
 
-    if (!thumbnailPublicId) {
-      return NextResponse.json(
-        { success: false, error: 'Missing thumbnailPublicId' },
-        { status: 400 }
-      );
-    }
+    if (!youtubeUrl) {
+      return NextResponse.json(
+        { success: false, error: 'Missing youtubeUrl in query parameters' },
+        { status: 400 }
+      );
+    }
 
-    // Delete the video thumbnail from Cloudinary
-    const result = await cloudinary.uploader.destroy(thumbnailPublicId, {
-      resource_type: 'image',
-    });
+    // First, find the thumbnail publicId using the youtubeUrl from metadata
+    const imagesResult = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: 'videos_thumbnails/',
+      resource_type: 'image',
+      metadata: true,
+      max_results: 100,
+    });
+    
+    const videoToDelete = imagesResult.resources.find(
+      (res: any) => res.metadata && decodeURIComponent(res.metadata.youtubeUrl) === youtubeUrl
+    );
 
-    if (result.result !== 'ok') {
-      return NextResponse.json(
-        { success: false, error: 'Delete failed on Cloudinary' },
-        { status: 500 }
-      );
-    }
+    if (!videoToDelete) {
+      return NextResponse.json(
+        { success: false, error: 'Video not found' },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    const err = error as Error;
-    console.error('Delete error:', err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
-  }
+    // Delete the video thumbnail from Cloudinary using its public_id
+    const result = await cloudinary.uploader.destroy(videoToDelete.public_id, {
+      resource_type: 'image',
+    });
+
+    if (result.result !== 'ok') {
+      return NextResponse.json(
+        { success: false, error: 'Delete failed on Cloudinary' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+
+  } catch (error) {
+    const err = error as Error;
+    console.error('Delete error:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
 }
