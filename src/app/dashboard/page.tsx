@@ -93,11 +93,11 @@ export default function DashboardPage() {
       } else {
         alert("Upload failed: " + (data.message || JSON.stringify(data)));
       }
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      alert("Something went wrong during upload: " + (error.message || JSON.stringify(error)));
-      setLoading(false);
-    }
+   } catch (error) {
+  console.error("Video upload error:", error);
+  alert("Something went wrong during video upload: " + (error instanceof Error ? error.message : JSON.stringify(error)));
+  setLoading(false);
+}
   };
 
   // Uploads a new YouTube video link
