@@ -22,7 +22,7 @@ interface CloudinaryResource {
   };
 }
 
-export const GET = async (_req: NextRequest) => {
+export const GET = async () => {
   try {
     const { resources } = await cloudinary.v2.search
       .expression('folder:notes-pdfs')

@@ -56,14 +56,7 @@ export default function HomePage() {
 
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [itemsToDisplay, setItemsToDisplay] = useState(0);
-
-  // Dragging state
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [scrollPosition, setScrollPosition] = useState(0);
 
   // Firebase auth check
   useEffect(() => {
