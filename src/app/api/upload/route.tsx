@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import cloudinary from "cloudinary";
+import cloudinary, { UploadApiResponse } from "cloudinary";
 
 // Cloudinary configuration
 cloudinary.v2.config({
@@ -31,7 +31,7 @@ export const GET = async () => {
       .max_results(50)
       .execute();
 
-  const notes = resources.map((resource: CloudinaryResource) => ({
+    const notes = resources.map((resource: CloudinaryResource) => ({
       url: resource.secure_url,
       publicId: resource.public_id,
       className: resource.metadata?.className || '',
@@ -57,13 +57,13 @@ export const POST = async (req: NextRequest) => {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
-    
+
     const chapterNumber = (formData.get("chapterNumber") || "") as string;
     const chapterName = (formData.get("chapterName") || "") as string;
     const className = (formData.get("className") || "") as string;
     const subjectName = (formData.get("subjectName") || "") as string; // Get the new subjectName
     const description = (formData.get("description") || "") as string;
-    
+
     if (!file) {
       return NextResponse.json({ message: "No file uploaded" }, { status: 400 });
     }
@@ -71,27 +71,34 @@ export const POST = async (req: NextRequest) => {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = new Uint8Array(arrayBuffer);
 
-     const result = await new Promise<any>((resolve, reject) => {
+    const result = await new Promise<UploadApiResponse>((resolve, reject) => {
       cloudinary.v2.uploader
         .upload_stream(
           {
             folder: "notes-pdfs",
-            resource_type: "raw", 
+            resource_type: "raw",
             metadata: {
               className: className,
               subjectName: subjectName, // Save the new subjectName metadata
               chapterName: chapterName,
               chapterNumber: chapterNumber,
-              description: description 
+              description: description
             }
           },
+          // Corrected code
           function (error, result) {
             if (error) {
               console.error("Cloudinary upload stream error:", error);
               reject(error);
               return;
             }
-            resolve(result);
+
+            if (!result) { // <-- यह check जोड़ें
+              reject(new Error("Cloudinary upload failed: no result object"));
+              return;
+            }
+
+            resolve(result); // अब `result` के `undefined` होने की कोई संभावना नहीं है
           }
         )
         .end(buffer);

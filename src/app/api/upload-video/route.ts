@@ -83,14 +83,14 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     // Automatically generate the YouTube thumbnail URL
     const youtubeThumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-    
+
     // Fetch the thumbnail image from YouTube
     const thumbnailResponse = await fetch(youtubeThumbnailUrl);
     if (!thumbnailResponse.ok) {
-        throw new Error(`Failed to fetch YouTube thumbnail: ${thumbnailResponse.statusText}`);
+      throw new Error(`Failed to fetch YouTube thumbnail: ${thumbnailResponse.statusText}`);
     }
 
     // Read the thumbnail into a buffer
@@ -147,7 +147,7 @@ export async function GET() {
       metadata: true, // Fetch metadata instead of context
       max_results: 100,
     });
-    
+
     const videos = (imagesResult.resources as CloudinaryVideoResource[])
       .map((file) => {
         const metadata = parseMetadata(file.metadata);
@@ -179,54 +179,54 @@ export async function GET() {
 
 // DELETE handler to delete a video thumbnail and its metadata
 export async function DELETE(req: NextRequest) {
-  try {
-    // Get the youtubeUrl from the URL query parameters
-    const youtubeUrl = req.nextUrl.searchParams.get("youtubeUrl");
+  try {
+    // Get the youtubeUrl from the URL query parameters
+    const youtubeUrl = req.nextUrl.searchParams.get("youtubeUrl");
 
-    if (!youtubeUrl) {
-      return NextResponse.json(
-        { success: false, error: 'Missing youtubeUrl in query parameters' },
-        { status: 400 }
-      );
-    }
+    if (!youtubeUrl) {
+      return NextResponse.json(
+        { success: false, error: 'Missing youtubeUrl in query parameters' },
+        { status: 400 }
+      );
+    }
 
-    // First, find the thumbnail publicId using the youtubeUrl from metadata
-    const imagesResult = await cloudinary.api.resources({
-      type: 'upload',
-      prefix: 'videos_thumbnails/',
-      resource_type: 'image',
-      metadata: true,
-      max_results: 100,
-    });
-    
-    const videoToDelete = imagesResult.resources.find(
-      (res: any) => res.metadata && decodeURIComponent(res.metadata.youtubeUrl) === youtubeUrl
-    );
+    // First, find the thumbnail publicId using the youtubeUrl from metadata
+    const imagesResult = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: 'videos_thumbnails/',
+      resource_type: 'image',
+      metadata: true,
+      max_results: 100,
+    });
 
-    if (!videoToDelete) {
-      return NextResponse.json(
-        { success: false, error: 'Video not found' },
-        { status: 404 }
-      );
-    }
+    const videoToDelete = imagesResult.resources.find(
+      (res: CloudinaryVideoResource) => res.metadata && res.metadata.youtubeUrl && decodeURIComponent(res.metadata.youtubeUrl) === youtubeUrl
+    );
 
-    // Delete the video thumbnail from Cloudinary using its public_id
-    const result = await cloudinary.uploader.destroy(videoToDelete.public_id, {
-      resource_type: 'image',
-    });
+    if (!videoToDelete) {
+      return NextResponse.json(
+        { success: false, error: 'Video not found' },
+        { status: 404 }
+      );
+    }
 
-    if (result.result !== 'ok') {
-      return NextResponse.json(
-        { success: false, error: 'Delete failed on Cloudinary' },
-        { status: 500 }
-      );
-    }
+    // Delete the video thumbnail from Cloudinary using its public_id
+    const result = await cloudinary.uploader.destroy(videoToDelete.public_id, {
+      resource_type: 'image',
+    });
 
-    return NextResponse.json({ success: true });
+    if (result.result !== 'ok') {
+      return NextResponse.json(
+        { success: false, error: 'Delete failed on Cloudinary' },
+        { status: 500 }
+      );
+    }
 
-  } catch (error) {
-    const err = error as Error;
-    console.error('Delete error:', err);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
-  }
+    return NextResponse.json({ success: true });
+
+  } catch (error) {
+    const err = error as Error;
+    console.error('Delete error:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
 }

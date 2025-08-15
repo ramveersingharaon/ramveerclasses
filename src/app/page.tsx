@@ -8,11 +8,13 @@ import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { app } from '../../firebaseConfig';
 import { FaPlayCircle } from 'react-icons/fa';
 import { BiChevronDown, BiChevronUp } from 'react-icons/bi';
+import Image from 'next/image';
 
 // Define a union type for different content types
 type Content = Note | Video;
 
 interface Note {
+  public_id: string;
   type: 'note';
   chapterNumber: string;
   chapterName: string;
@@ -81,7 +83,7 @@ export default function HomePage() {
         const videosRawData = videosRes.ok ? await videosRes.json() : null;
 
         // Notes डेटा को सही से निकालें
-        let notesArray: any[] = [];
+        let notesArray: Note[] = [];
         if (Array.isArray(notesRawData)) {
           notesArray = notesRawData;
         } else if (notesRawData && Array.isArray(notesRawData.notes)) {
@@ -89,7 +91,7 @@ export default function HomePage() {
         }
 
         // Videos डेटा को सही से निकालें
-        let videosArray: any[] = [];
+        let videosArray: Video[] = [];
         if (Array.isArray(videosRawData)) {
           videosArray = videosRawData;
         } else if (videosRawData && Array.isArray(videosRawData.videos)) {
@@ -99,11 +101,11 @@ export default function HomePage() {
         const notes = notesArray.map((note) => ({
           ...note,
           type: 'note',
-          publicId: note.publicId || note.public_id,
+          publicId: note.publicId || note.public_id, // <-- यहाँ आप 'public_id' का उपयोग कर रहे हैं
           description: note.description || ''
-        }) as Note);
+        }) as Note)
 
-        const videos = videosArray.map((video: any) => ({
+        const videos = videosArray.map(video => ({ // 'video: any' को हटा दें
           ...video,
           type: 'video',
           description: video.description || ''
@@ -501,10 +503,11 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
             className="relative w-full h-full group focus:outline-none flex items-center justify-center"
           >
             {videoId && (
-              <img
+              <Image
                 src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
                 alt="Video Thumbnail"
-                className="absolute inset-0 w-full h-full object-cover"
+                layout="fill" // Ensures the image fills its parent container
+                objectFit="cover" // Equivalent to object-cover in CSS
               />
             )}
             <FaPlayCircle className="relative z-10 text-white text-6xl opacity-80 group-hover:opacity-100 transition duration-300 transform group-hover:scale-110" />
