@@ -6,6 +6,7 @@ import { app } from '../../../firebaseConfig';
 import Link from "next/link";
 import { FaPlayCircle } from 'react-icons/fa';
 import { BiChevronDown, BiChevronUp } from 'react-icons/bi';
+import Image from 'next/image';
 
 // Type definition for Video
 interface Video {
@@ -35,7 +36,7 @@ export default function VideosPage() {
   // Filter States
   const [activeClassFilter, setActiveClassFilter] = useState<string>('all');
   const [activeSubjectFilter, setActiveSubjectFilter] = useState<string>('all');
-  
+
   // Dynamic filter options
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
@@ -56,9 +57,9 @@ export default function VideosPage() {
         setFetching(true);
         const res = await fetch("/api/upload-video");
         const data = res.ok ? await res.json() : [];
-        
+
         if (Array.isArray(data)) {
-          const videos = data.map((video: any) => ({ ...video, type: 'video' }) as Video);
+          const videos = data.map(video => ({ ...video, type: 'video' }) as Video)
           setAllVideos(videos);
         }
       } catch (error) {
@@ -89,7 +90,7 @@ export default function VideosPage() {
     if (activeSubjectFilter !== 'all') {
       newFilteredVideos = newFilteredVideos.filter(video => video.subjectName === activeSubjectFilter);
     }
-    
+
     setFilteredVideos(newFilteredVideos);
   }, [activeClassFilter, activeSubjectFilter, allVideos]);
 
@@ -197,89 +198,90 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-  {/* Video Player / Thumbnail */}
-  <div className="relative w-full aspect-video">
-    {isPlaying && videoId ? (
-      <iframe
-        className="absolute top-0 left-0 w-full h-full"
-        src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
-        title={video.chapterName}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-      />
-    ) : (
-      <button
-        onClick={handlePlay}
-        className="relative w-full h-full group focus:outline-none flex items-center justify-center"
-      >
-        {videoId && (
-          <img
-            src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
-            alt="Video Thumbnail"
-            className="absolute inset-0 w-full h-full object-cover"
+      {/* Video Player / Thumbnail */}
+      <div className="relative w-full aspect-video">
+        {isPlaying && videoId ? (
+          <iframe
+            className="absolute top-0 left-0 w-full h-full"
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
+            title={video.chapterName}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
           />
-        )}
-        <FaPlayCircle className="relative z-10 text-white text-6xl opacity-80 group-hover:opacity-100 transition duration-300 transform group-hover:scale-110" />
-      </button>
-    )}
-  </div>
-
-  {/* Video Info */}
-  <div className="p-4">
-    <p className="text-sm font-semibold text-blue-600 mb-1">
-      Class {video.className} {video.subjectName ? `| ${video.subjectName}` : ''} | Chapter {video.chapterNumber}
-    </p>
-    <h3 className="text-xl font-bold text-gray-800 line-clamp-2">{video.chapterName}</h3>
-
-    {/* Description with Read More / Less */}
-    {video.description && (
-      <>
-        <p
-          ref={descriptionRef}
-          className={`text-gray-600 text-sm mt-2 whitespace-pre-line ${!isExpanded && isTruncated ? 'line-clamp-2' : ''}`}
-        >
-          {video.description}
-        </p>
-        {isTruncated && (
+        ) : (
           <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-blue-600 hover:underline flex items-center mt-2 text-sm"
+            onClick={handlePlay}
+            className="relative w-full h-full group focus:outline-none flex items-center justify-center"
           >
-            {isExpanded ? (
-              <>
-                Read Less <BiChevronUp className="ml-1" />
-              </>
-            ) : (
-              <>
-                Read More <BiChevronDown className="ml-1" />
-              </>
+            {videoId && (
+              <Image
+                src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+                alt="Video Thumbnail"
+                layout="fill"
+                objectFit="cover"
+              />
             )}
+            <FaPlayCircle className="relative z-10 text-white text-6xl opacity-80 group-hover:opacity-100 transition duration-300 transform group-hover:scale-110" />
           </button>
         )}
-      </>
-    )}
+      </div>
 
-    {/* Action Buttons */}
-    <div className="mt-4 flex gap-2">
-      <Link
-        href={video.youtubeUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex-1 px-4 py-2 border border-blue-600 text-blue-600 rounded-md text-sm font-semibold text-center hover:bg-blue-100 transition-colors duration-300"
-      >
-        Watch on YouTube
-      </Link>
-      {isAdmin && (
-        <button
-          onClick={onDelete}
-          className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold hover:bg-red-700 transition-colors duration-300"
-        >
-          Delete
-        </button>
-      )}
+      {/* Video Info */}
+      <div className="p-4">
+        <p className="text-sm font-semibold text-blue-600 mb-1">
+          Class {video.className} {video.subjectName ? `| ${video.subjectName}` : ''} | Chapter {video.chapterNumber}
+        </p>
+        <h3 className="text-xl font-bold text-gray-800 line-clamp-2">{video.chapterName}</h3>
+
+        {/* Description with Read More / Less */}
+        {video.description && (
+          <>
+            <p
+              ref={descriptionRef}
+              className={`text-gray-600 text-sm mt-2 whitespace-pre-line ${!isExpanded && isTruncated ? 'line-clamp-2' : ''}`}
+            >
+              {video.description}
+            </p>
+            {isTruncated && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-blue-600 hover:underline flex items-center mt-2 text-sm"
+              >
+                {isExpanded ? (
+                  <>
+                    Read Less <BiChevronUp className="ml-1" />
+                  </>
+                ) : (
+                  <>
+                    Read More <BiChevronDown className="ml-1" />
+                  </>
+                )}
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Action Buttons */}
+        <div className="mt-4 flex gap-2">
+          <Link
+            href={video.youtubeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 px-4 py-2 border border-blue-600 text-blue-600 rounded-md text-sm font-semibold text-center hover:bg-blue-100 transition-colors duration-300"
+          >
+            Watch on YouTube
+          </Link>
+          {isAdmin && (
+            <button
+              onClick={onDelete}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md text-sm font-semibold hover:bg-red-700 transition-colors duration-300"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
     </div>
-  </div>
-</div>
 
   );
 }
