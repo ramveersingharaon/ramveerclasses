@@ -1,3 +1,4 @@
+// app/api/upload-video/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -13,20 +14,22 @@ type VideoMetadata = {
   chapterName: string;
   chapterNumber: string;
   className: string;
+  subjectName: string;
   youtubeUrl: string;
+  description: string;
 };
 
 // Type definition for Cloudinary resource
 type CloudinaryVideoResource = {
   secure_url: string;
   public_id: string;
-  context?: {
-    custom: {
-      chapterName?: string;
-      chapterNumber?: string;
-      className?: string;
-      youtubeUrl?: string;
-    };
+  metadata?: {
+    chapterName?: string;
+    chapterNumber?: string;
+    className?: string;
+    subjectName?: string;
+    youtubeUrl?: string;
+    description?: string;
   };
   created_at: string;
 };
@@ -38,16 +41,19 @@ const getYouTubeId = (url: string): string | null => {
   return match ? match[1] : null;
 };
 
-// Helper function to parse metadata from Cloudinary context
-const parseMetadata = (context: CloudinaryVideoResource['context']): VideoMetadata => {
-  if (!context?.custom) {
-    return { chapterName: '', chapterNumber: '', className: '', youtubeUrl: '' };
+// Helper function to parse metadata from Cloudinary metadata field
+const parseMetadata = (metadata: CloudinaryVideoResource['metadata']): VideoMetadata => {
+  if (!metadata) {
+    return { chapterName: '', chapterNumber: '', className: '', subjectName: '', youtubeUrl: '', description: '' };
   }
+  // Decode all metadata values
   return {
-    chapterName: context.custom.chapterName || '',
-    chapterNumber: context.custom.chapterNumber || '',
-    className: context.custom.className || '',
-    youtubeUrl: context.custom.youtubeUrl || '',
+    chapterName: metadata.chapterName ? decodeURIComponent(metadata.chapterName) : '',
+    chapterNumber: metadata.chapterNumber ? decodeURIComponent(metadata.chapterNumber) : '',
+    className: metadata.className ? decodeURIComponent(metadata.className) : '',
+    subjectName: metadata.subjectName ? decodeURIComponent(metadata.subjectName) : '',
+    youtubeUrl: metadata.youtubeUrl ? decodeURIComponent(metadata.youtubeUrl) : '',
+    description: metadata.description ? decodeURIComponent(metadata.description) : '',
   };
 };
 
@@ -59,9 +65,11 @@ export async function POST(req: NextRequest) {
     const chapterName = formData.get("chapterName") as string;
     const chapterNumber = formData.get("chapterNumber") as string;
     const className = formData.get("className") as string;
+    const subjectName = formData.get("subjectName") as string;
+    const description = formData.get("description") as string;
 
-    // Check for all required fields except the thumbnail file
-    if (!youtubeUrl || !chapterName || !chapterNumber || !className) {
+    // Check for all required fields
+    if (!youtubeUrl || !chapterName || !chapterNumber || !className || !subjectName) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
@@ -94,9 +102,17 @@ export async function POST(req: NextRequest) {
         {
           resource_type: 'image',
           folder: 'videos_thumbnails',
-          public_id: `video_${Date.now()}`, // Create a unique public ID
+          public_id: `video_${Date.now()}`,
           overwrite: true,
-          context: `chapterName=${chapterName}|chapterNumber=${chapterNumber}|className=${className}|youtubeUrl=${youtubeUrl}`,
+          // Use metadata instead of context
+          metadata: {
+            chapterName: encodeURIComponent(chapterName),
+            chapterNumber: encodeURIComponent(chapterNumber),
+            className: encodeURIComponent(className),
+            subjectName: encodeURIComponent(subjectName),
+            youtubeUrl: encodeURIComponent(youtubeUrl),
+            description: encodeURIComponent(description) // Encode the long string
+          },
         },
         (error, result) => {
           if (error) reject(error);
@@ -128,24 +144,26 @@ export async function GET() {
       type: 'upload',
       prefix: 'videos_thumbnails/',
       resource_type: 'image',
-      context: true,
-      max_results: 100, // Adjust as needed
+      metadata: true, // Fetch metadata instead of context
+      max_results: 100,
     });
     
     const videos = (imagesResult.resources as CloudinaryVideoResource[])
       .map((file) => {
-        const metadata = parseMetadata(file.context);
+        const metadata = parseMetadata(file.metadata);
         return {
           youtubeUrl: metadata.youtubeUrl,
           chapterNumber: metadata.chapterNumber,
           chapterName: metadata.chapterName,
           className: metadata.className,
+          subjectName: metadata.subjectName,
+          description: metadata.description,
           thumbnailUrl: file.secure_url,
           thumbnailPublicId: file.public_id,
           created_at: file.created_at,
         };
       })
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by latest upload time
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return NextResponse.json(videos);
   } catch (error) {
