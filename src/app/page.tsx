@@ -1,94 +1,28 @@
-// "use client";
-
-// import Link from "next/link";
-
-// export default function HomePage() {
-//   const handleAppClick = () => {
-//     alert("Coming Soon");
-//   };
-
-//   return (
-//     <div className="min-h-screen bg-gray-50 text-gray-800">
-//       {/* Hero Section */}
-//       <section className="bg-blue-600 text-white py-20 text-center px-4">
-//         <h1 className="text-4xl md:text-5xl font-bold mb-4">
-//           Welcome to Ramveer Classes
-//         </h1>
-//         <p className="text-lg mb-6">
-//           UP Board के students के लिए Classes और Study material उपलब्ध हैं।
-//         </p>
-//         <div className="flex flex-col md:flex-row justify-center gap-4 flex-wrap">
-//           <Link
-//             href="/register"
-//             className="bg-white text-blue-600 px-6 py-3 rounded-md font-semibold hover:bg-gray-100 transition"
-//           >
-//             Register करें
-//           </Link>
-
-//           {/* Updated button with alert */}
-//           <button
-//             onClick={handleAppClick}
-//             className="bg-white text-blue-600 px-6 py-3 rounded-md font-semibold hover:bg-gray-100 transition"
-//           >
-//             App डाउनलोड करें
-//           </button>
-
-//           <a
-//             href="https://www.youtube.com/@ramveerclasses"
-//             target="_blank"
-//             rel="noopener noreferrer"
-//             className="bg-white text-blue-600 px-6 py-3 rounded-md font-semibold hover:bg-gray-100 transition"
-//           >
-//             YouTube पर क्लास देखें
-//           </a>
-//           <a
-//             href="https://chat.whatsapp.com/EL1PtykUXGsCK06hBqEaR4"
-//             target="_blank"
-//             rel="noopener noreferrer"
-//             className="bg-white text-blue-600 px-6 py-3 rounded-md font-semibold hover:bg-gray-100 transition"
-//           >
-//             WhatsApp ग्रुप जॉइन करें
-//           </a>
-//         </div>
-//       </section>
-
-//       {/* About Section */}
-//       <section className="py-16 px-6 max-w-4xl mx-auto text-center">
-//         <h2 className="text-3xl font-bold mb-4">हमारे बारे में</h2>
-//         <p className="text-gray-700 leading-relaxed">
-//           हमारा मकसद है कि हर छात्र को अच्छी शिक्षा मिले, चाहे वह किसी भी background से हो।
-//           हम निशुल्क guidance, notes और वीडियो क्लासेस प्रदान करते हैं ताकि आप अच्छे नंबरों से पास हों।
-//         </p>
-//       </section>
-//     </div>
-//   );
-// }
-
-
-// src/app/notes/10th/page.tsx
-
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { app } from '../../firebaseConfig';
 import { IoIosArrowBack, IoIosArrowForward } from 'react-icons/io';
+import { FaPlayCircle } from 'react-icons/fa';
+import { BiChevronDown, BiChevronUp } from 'react-icons/bi';
 
 // Define a union type for different content types
 type Content = Note | Video;
 
 interface Note {
   type: 'note';
-  chapterNumber: string;
+  chapterNumber: string
   chapterName: string;
   url: string;
-  public_id: string;
+  publicId: string;
   className?: string;
-  thumbnailUrl: string;
-  thumbnailPublicId: string;
+  subjectName?: string;
   created_at: string;
+  descriptionImages?: string[];
+  descriptionImageCount?: number;
 }
 
 interface Video {
@@ -96,37 +30,40 @@ interface Video {
   chapterNumber: string;
   chapterName: string;
   youtubeUrl: string;
-  thumbnailUrl: string;
-  thumbnailPublicId: string;
   className?: string;
+  subjectName?: string;
   created_at: string;
+  description?: string;
+  thumbnailPublicId?: string; // Add thumbnailPublicId
 }
 
 // Function to extract YouTube Video ID from various URL formats
 const getYouTubeId = (url: string): string | null => {
-  const regExp = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:.+)?$/;
+  const regExp = /^(?:https?:\/\/)?(?:www\.)?(?:youtu\.be\/|youtube.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))((\w|-){11})(?:.+)?$/;
   const match = url.match(regExp);
   return match ? match[1] : null;
 };
 
 export default function HomePage() {
-  const [allContent, setAllContent] = useState<Content[]>([]);
-  const [filteredContent, setFilteredContent] = useState<Content[]>([]);
-  const [displayedContent, setDisplayedContent] = useState<Content[]>([]);
-  const [fetching, setFetching] = useState(true);
+  const [content, setContent] = useState<Content[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  // NEW: Separate cursors for notes and videos
+  const [nextNotesCursor, setNextNotesCursor] = useState<string | null>(null);
+  const [nextVideosCursor, setNextVideosCursor] = useState<string | null>(null);
+
+  const lastPostRef = useRef<HTMLDivElement>(null);
+
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<string>('all-all');
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  
-  // Staggered loading state
-  const [itemsToDisplay, setItemsToDisplay] = useState(0);
 
-  // Dragging state
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [scrollPosition, setScrollPosition] = useState(0);
+  const [activeTypeFilter, setActiveTypeFilter] = useState<string>('all');
+  const [activeClassFilter, setActiveClassFilter] = useState<string>('all');
+  const [activeSubjectFilter, setActiveSubjectFilter] = useState<string>('all');
 
-  // Firebase auth check
+  const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+
   useEffect(() => {
     const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -135,179 +72,148 @@ export default function HomePage() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch all notes and videos
-  useEffect(() => {
-    const fetchContent = async () => {
-      try {
-        setFetching(true);
-        const [notesRes, videosRes] = await Promise.all([
-          fetch("/api/upload"),
-          fetch("/api/upload-video"),
-        ]);
+  // 🚀 UPDATED: fetchContent with separate cursors
+  const fetchContent = useCallback(async () => {
+    if (loading || (!nextNotesCursor && !nextVideosCursor && !hasMore)) return;
 
-        const notesData: Note[] = await notesRes.json();
-        const videosData: Video[] = await videosRes.json();
+    setLoading(true);
+    try {
+      const notesUrl = `/api/upload?limit=3${nextNotesCursor ? `&nextCursor=${nextNotesCursor}` : ''}`;
+      const videosUrl = `/api/upload-video?limit=3${nextVideosCursor ? `&nextCursor=${nextVideosCursor}` : ''}`;
 
-        const notes = notesData.map((note) => ({ ...note, type: 'note' }) as Note);
-        const videos = videosData.map((video) => ({ ...video, type: 'video' }) as Video);
+      const [notesRes, videosRes] = await Promise.all([
+        fetch(notesUrl),
+        fetch(videosUrl)
+      ]);
 
-        const combinedContent = [...notes, ...videos].sort((a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      const notesData = notesRes.ok ? await notesRes.json() : null;
+      const videosData = videosRes.ok ? await videosRes.json() : null;
+
+      const notesArray = Array.isArray(notesData?.notes) ? notesData.notes : [];
+      const videosArray = Array.isArray(videosData?.videos) ? videosData.videos : [];
+
+      const newFetchedContent = [...notesArray, ...videosArray].map(item => ({
+        ...item,
+        type: item.url ? 'note' : 'video'
+      }));
+
+      setNextNotesCursor(notesData?.nextCursor || null);
+      setNextVideosCursor(videosData?.nextCursor || null);
+      setHasMore(!!(notesData?.nextCursor || videosData?.nextCursor));
+
+      setContent(prevContent => {
+        const combinedContent = [...prevContent, ...newFetchedContent];
+        const sortedContent = combinedContent.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        const uniqueContent = sortedContent.filter((item, index, self) =>
+          index === self.findIndex(t => (
+            (t.type === 'note' && item.type === 'note' && t.publicId === item.publicId) ||
+            (t.type === 'video' && item.type === 'video' && t.youtubeUrl === item.youtubeUrl)
+          ))
         );
-        
-        setAllContent(combinedContent);
-      } catch (error) {
-        console.error("Error fetching content:", error);
-      } finally {
-        setFetching(false);
-      }
-    };
+        return uniqueContent;
+      });
+
+    } catch (error) {
+      console.error("Error fetching content:", error);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, nextNotesCursor, nextVideosCursor, hasMore]);
+
+  // Initial fetch on component mount
+  useEffect(() => {
     fetchContent();
   }, []);
-  
-  // Handle filter changes and reset staggered loading
+
+  // IntersectionObserver logic to trigger fetch on scroll
   useEffect(() => {
-    const [contentType, className] = activeFilter.split('-');
-
-    let newFilteredContent = allContent;
-    if (contentType !== 'all') {
-      newFilteredContent = newFilteredContent.filter(item => item.type === contentType);
-    }
-    if (className !== 'all') {
-      newFilteredContent = newFilteredContent.filter(item => item.className === className);
-    }
-
-    setFilteredContent(newFilteredContent);
-    setItemsToDisplay(0); // Reset the staggered loading counter
-  }, [activeFilter, allContent]);
-
-  // Handle staggered loading effect
-  useEffect(() => {
-    if (itemsToDisplay < filteredContent.length) {
-      const timer = setTimeout(() => {
-        setDisplayedContent(filteredContent.slice(0, itemsToDisplay + 1));
-        setItemsToDisplay(prev => prev + 1);
-      }, 100); // 100ms delay between each card load
-      return () => clearTimeout(timer);
-    }
-  }, [itemsToDisplay, filteredContent]);
-
-  const handleDownload = async (url: string, chapterName: string) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.setAttribute('download', `${chapterName}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      alert("Failed to download file.");
-      console.error("Download error:", error);
-    }
-  };
-
-  const handleDelete = async (item: Content) => {
-    if (!confirm("Are you sure you want to delete this content?")) return;
-    try {
-      let endpoint = '';
-      let bodyData: any;
-      
-      if (item.type === 'note') {
-        endpoint = "/api/upload";
-        bodyData = { public_id: item.public_id, thumbnailPublicId: item.thumbnailPublicId };
-      } else {
-        endpoint = "/api/upload-video";
-        bodyData = { thumbnailPublicId: item.thumbnailPublicId };
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !loading && hasMore) {
+        fetchContent();
       }
+    }, { threshold: 1.0 });
 
-      const res = await fetch(endpoint, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyData),
-      });
-      if (!res.ok) throw new Error("Delete failed");
-
-      setAllContent((prev) => prev.filter((content) => {
-        if (content.type === 'note' && item.type === 'note') {
-          return content.public_id !== item.public_id;
-        }
-        if (content.type === 'video' && item.type === 'video') {
-          return content.thumbnailPublicId !== item.thumbnailPublicId;
-        }
-        return true;
-      }));
-      
-      alert("Content deleted successfully!");
-    } catch (error) {
-      alert("Failed to delete content");
-      console.error(error);
+    const currentRef = lastPostRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
     }
-  };
 
-  const scrollTagsLeft = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -200, behavior: 'smooth' });
-    }
-  };
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [loading, hasMore, fetchContent]);
 
-  const scrollTagsRight = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 200, behavior: 'smooth' });
-    }
-  };
-
-  const handleTagClick = (filterValue: string) => {
-    setActiveFilter(filterValue);
-  };
+  // Reset states when filters change
+  useEffect(() => {
+    setContent([]);
+    setNextNotesCursor(null);
+    setNextVideosCursor(null);
+    setHasMore(true);
+    // fetchContent is triggered by the change in cursor states
+  }, [activeTypeFilter, activeClassFilter, activeSubjectFilter]);
   
-  // Dragging event handlers
-  const onMouseDown = (e: React.MouseEvent) => {
-    if (scrollContainerRef.current) {
-      setIsDragging(true);
-      setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
-      setScrollPosition(scrollContainerRef.current.scrollLeft);
+  // 🚀 NEW: handleDelete functions
+  const handleDeleteNote = async (note: Note) => {
+    if (!isAdmin || !note.publicId) return;
+
+    if (window.confirm("Are you sure you want to delete this note?")) {
+      try {
+        const response = await fetch(`/api/upload?publicId=${note.publicId}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          alert("Note deleted successfully!");
+          // UI se note ko hatayein
+          setContent(prevContent => prevContent.filter(item => item.type === 'video' || (item.type === 'note' && item.publicId !== note.publicId)));
+        } else {
+          const errorData = await response.json();
+          alert(`Error deleting note: ${errorData.message}`);
+        }
+      } catch (error) {
+        console.error("Failed to delete note:", error);
+        alert("Failed to delete note. Please try again.");
+      }
     }
   };
 
-  const onMouseLeave = () => {
-    setIsDragging(false);
-  };
+  const handleDeleteVideo = async (video: Video) => {
+    if (!isAdmin || !video.thumbnailPublicId) return;
 
-  const onMouseUp = () => {
-    setIsDragging(false);
-  };
+    if (window.confirm("Are you sure you want to delete this video?")) {
+      try {
+        const response = await fetch('/api/upload-video', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ thumbnailPublicId: video.thumbnailPublicId }),
+        });
 
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !scrollContainerRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - scrollContainerRef.current.offsetLeft;
-    const walk = (x - startX) * 1;
-    scrollContainerRef.current.scrollLeft = scrollPosition - walk;
-  };
-
-  // Touch event handlers for mobile
-  const onTouchStart = (e: React.TouchEvent) => {
-    if (scrollContainerRef.current) {
-      setStartX(e.touches[0].pageX - scrollContainerRef.current.offsetLeft);
-      setScrollPosition(scrollContainerRef.current.scrollLeft);
-      setIsDragging(true);
+        if (response.ok) {
+          alert("Video deleted successfully!");
+          // UI se video ko hatayein
+          setContent(prevContent => prevContent.filter(item => item.type === 'note' || (item.type === 'video' && item.thumbnailPublicId !== video.thumbnailPublicId)));
+        } else {
+          const errorData = await response.json();
+          alert(`Error deleting video: ${errorData.message}`);
+        }
+      } catch (error) {
+        console.error("Failed to delete video:", error);
+        alert("Failed to delete video. Please try again.");
+      }
     }
   };
 
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || !scrollContainerRef.current) return;
-    const x = e.touches[0].pageX - scrollContainerRef.current.offsetLeft;
-    const walk = (x - startX) * 1;
-    scrollContainerRef.current.scrollLeft = scrollPosition - walk;
-  };
-
-  const onTouchEnd = () => {
-    setIsDragging(false);
-  };
+  const filteredContent = content.filter(item => {
+    const isTypeMatch = activeTypeFilter === 'all' || item.type === activeTypeFilter;
+    const isClassMatch = activeClassFilter === 'all' || item.className === activeClassFilter;
+    const isSubjectMatch = activeSubjectFilter === 'all' || item.subjectName === activeSubjectFilter;
+    return isTypeMatch && isClassMatch && isSubjectMatch;
+  });
 
   return (
     <>
@@ -319,23 +225,8 @@ export default function HomePage() {
         .hide-scrollbar::-webkit-scrollbar {
           display: none;
         }
-        .stagger-fade-in {
-          animation: fadeIn 0.5s ease-in-out forwards;
-          opacity: 0;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
       `}</style>
       <div className="min-h-screen bg-gray-100 text-gray-800">
-        
         <section className="bg-blue-600 text-white py-20 px-4 sm:px-6 lg:px-8 text-center">
           <div className="max-w-4xl mx-auto">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold mb-4 animate-fadeIn">
@@ -355,74 +246,65 @@ export default function HomePage() {
         <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
           <h2 className="text-3xl sm:text-4xl font-bold text-center text-blue-800 mb-6">Latest Class Content</h2>
 
-          {/* Scrollable Filter Tags Section */}
-          <div className="relative flex items-center mb-8">
-            <button onClick={scrollTagsLeft} className="p-2 bg-white rounded-full shadow-md z-10 hidden md:block">
-              <IoIosArrowBack />
-            </button>
-            <div 
-              ref={scrollContainerRef} 
-              className="flex flex-nowrap overflow-x-auto scroll-smooth hide-scrollbar gap-3 px-2 cursor-grab active:cursor-grabbing"
-              onMouseDown={onMouseDown}
-              onMouseLeave={onMouseLeave}
-              onMouseUp={onMouseUp}
-              onMouseMove={onMouseMove}
-              onTouchStart={onTouchStart}
-              onTouchEnd={onTouchEnd}
-              onTouchMove={onTouchMove}
+          {/* Filter Section */}
+          <div className="flex flex-col sm:flex-row gap-4 mb-8 justify-center">
+            <select
+              value={activeTypeFilter}
+              onChange={(e) => setActiveTypeFilter(e.target.value)}
+              className="px-4 py-2 text-sm font-semibold rounded-full bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
-              <button
-                onClick={() => handleTagClick('all-all')}
-                className={`flex-shrink-0 px-4 py-2 rounded-full font-semibold text-sm transition-colors duration-300 shadow-md ${
-                  activeFilter === 'all-all' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-                }`}
-              >
-                All Content
-              </button>
-              {['6', '7', '8', '9', '10', '11', '12'].map(cls => (
-                <React.Fragment key={cls}>
-                  <button
-                    onClick={() => handleTagClick(`note-${cls}`)}
-                    className={`flex-shrink-0 px-4 py-2 rounded-full font-semibold text-sm transition-colors duration-300 shadow-md ${
-                      activeFilter === `note-${cls}` ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-                    }`}
-                  >
-                    Notes {cls}th
-                  </button>
-                  <button
-                    onClick={() => handleTagClick(`video-${cls}`)}
-                    className={`flex-shrink-0 px-4 py-2 rounded-full font-semibold text-sm transition-colors duration-300 shadow-md ${
-                      activeFilter === `video-${cls}` ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50'
-                    }`}
-                  >
-                    Videos {cls}th
-                  </button>
-                </React.Fragment>
+              <option value="all">All Content Types</option>
+              <option value="note">Notes</option>
+              <option value="video">Videos</option>
+            </select>
+
+            <select
+              value={activeClassFilter}
+              onChange={(e) => setActiveClassFilter(e.target.value)}
+              className="px-4 py-2 text-sm font-semibold rounded-full bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            >
+              <option value="all">All Classes</option>
+              {availableClasses.map(cls => (
+                <option key={cls} value={cls}>Class {cls}th</option>
               ))}
-            </div>
-            <button onClick={scrollTagsRight} className="p-2 bg-white rounded-full shadow-md z-10 hidden md:block">
-              <IoIosArrowForward />
-            </button>
+            </select>
+
+            {activeClassFilter !== 'all' && (
+              <select
+                value={activeSubjectFilter}
+                onChange={(e) => setActiveSubjectFilter(e.target.value)}
+                className="px-4 py-2 text-sm font-semibold rounded-full bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                <option value="all">All Subjects</option>
+                {availableSubjects.map(subject => (
+                  <option key={subject} value={subject}>{subject}</option>
+                ))}
+              </select>
+            )}
           </div>
 
-          {fetching && filteredContent.length === 0 ? (
-            <div className="flex justify-center items-center h-40">
-              <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <div className="grid grid-cols-1 gap-6">
+            {filteredContent.map((item, index) => (
+              <div key={index}>
+                {item.type === 'note' ? (
+                  // onDelete prop ko updated function se badla
+                  <NoteCard note={item as Note} isAdmin={isAdmin} onDelete={() => handleDeleteNote(item as Note)} onDownload={() => { }} />
+                ) : (
+                  // onDelete prop ko updated function se badla
+                  <VideoCard video={item as Video} isAdmin={isAdmin} onDelete={() => handleDeleteVideo(item as Video)} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {(loading || hasMore) && (
+            <div ref={lastPostRef} className="flex justify-center items-center my-8">
+              <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : displayedContent.length === 0 && !fetching ? (
+          )}
+
+          {!hasMore && filteredContent.length === 0 && (
             <p className="text-center text-gray-500 text-lg mt-10">No content found for this selection.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {displayedContent.map((item, index) => (
-                <div key={index} style={{ animationDelay: `${index * 50}ms` }} className="stagger-fade-in">
-                  {item.type === 'note' ? (
-                    <NoteCard note={item} isAdmin={isAdmin} onDelete={() => handleDelete(item)} onDownload={handleDownload} />
-                  ) : (
-                    <VideoCard video={item} isAdmin={isAdmin} onDelete={() => handleDelete(item)} />
-                  )}
-                </div>
-              ))}
-            </div>
           )}
         </section>
       </div>
@@ -432,27 +314,81 @@ export default function HomePage() {
 
 // Reusable Card Components
 function NoteCard({ note, isAdmin, onDelete, onDownload }: { note: Note, isAdmin: boolean, onDelete: () => void, onDownload: (url: string, chapterName: string) => void }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [allImages, setAllImages] = useState<string[]>(note.descriptionImages?.slice(0, 1) || []);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const hasMoreThanOneImage = (note.descriptionImageCount || 0) > 1;
+
+  const fetchAllImages = async () => {
+    if (isExpanded) {
+      setAllImages(note.descriptionImages?.slice(0, 1) || []);
+      setIsExpanded(false);
+      return;
+    }
+
+    if (note.publicId && hasMoreThanOneImage) {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/note-images?publicId=${note.publicId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch all images');
+        }
+        const data = await response.json();
+        setAllImages(data.descriptionImages);
+        setIsExpanded(true);
+      } catch (error) {
+        console.error("Error fetching all images:", error);
+        alert("Failed to load all images.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden transform transition-transform duration-300 hover:scale-105 hover:shadow-2xl flex flex-col">
-      <div className="relative w-full h-48 bg-gray-100 flex items-center justify-center">
-        {note.thumbnailUrl ? (
-          <Image
-            src={note.thumbnailUrl}
-            alt={note.chapterName}
-            layout="fill"
-            objectFit="cover"
-            priority
-          />
-        ) : (
-          <p className="text-gray-500 text-sm">No image available</p>
-        )}
-      </div>
-      <div className="flex-1 p-5 flex flex-col justify-between">
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col transform transition-transform duration-300 hover:scale-[1.01] hover:shadow-2xl">
+      {allImages && allImages.length > 0 && (
+        <div className="relative w-full overflow-hidden bg-gray-200 p-2">
+          <div className="flex flex-col gap-2">
+            {allImages.map((imageUrl, index) => (
+              <div key={index} className="relative w-full">
+                <img
+                  src={imageUrl}
+                  alt={`Note image ${index + 1}`}
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="p-5 flex flex-col justify-between">
         <div>
-          <h3 className="text-xl font-bold text-gray-800 truncate">{note.chapterName}</h3>
-          <p className="text-gray-500 text-sm mt-1">
-            Chapter {note.chapterNumber} (Class {note.className})
+          {hasMoreThanOneImage && (
+            <button
+              onClick={fetchAllImages}
+              className="text-blue-600 hover:underline flex items-center mt-2 text-sm"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <span>Loading...</span>
+              ) : isExpanded ? (
+                <>
+                  Show Less <BiChevronUp className="ml-1" />
+                </>
+              ) : (
+                <>
+                  Show All {note.descriptionImageCount} Images <BiChevronDown className="ml-1" />
+                </>
+              )}
+            </button>
+          )}
+          <p className="text-sm font-semibold text-blue-600 mb-1">
+            Class {note.className} {note.subjectName ? `| ${note.subjectName}` : ''} | Chapter {note.chapterNumber}
           </p>
+          <h3 className="text-xl font-bold text-gray-800 line-clamp-2">{note.chapterName}</h3>
         </div>
         <div className="mt-4 flex space-x-2">
           <button
@@ -476,68 +412,99 @@ function NoteCard({ note, isAdmin, onDelete, onDownload }: { note: Note, isAdmin
 }
 
 function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolean, onDelete: () => void }) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  
+  const [isExpanded, setIsExpanded] = useState(false);
+  const descriptionRef = useRef<HTMLParagraphElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  useEffect(() => {
+    const checkTruncation = () => {
+      if (descriptionRef.current && video.description) {
+        const style = window.getComputedStyle(descriptionRef.current);
+        const maxHeight = parseFloat(style.lineHeight) * 2;
+        setIsTruncated(descriptionRef.current.scrollHeight > maxHeight);
+      }
+    };
+    checkTruncation();
+    window.addEventListener('resize', checkTruncation);
+    return () => window.removeEventListener('resize', checkTruncation);
+  }, [video.description]);
+
   const videoId = getYouTubeId(video.youtubeUrl);
 
-  const thumbnailUrl = video.thumbnailUrl || (videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : null);
-
-  const handlePlay = () => {
-    if (videoId) {
-      setIsPlaying(true);
-    } else {
-      alert("Invalid YouTube URL. Please check the video link.");
-    }
-  };
-  
-  return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden transform transition-transform duration-300 hover:scale-105 hover:shadow-2xl flex flex-col">
-      <div className="relative w-full h-48 bg-gray-100 flex items-center justify-center">
-        {isPlaying && videoId ? (
-          <iframe
-            className="absolute top-0 left-0 w-full h-full"
-            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
-            title={video.chapterName}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        ) : (
-          thumbnailUrl ? (
-            <button onClick={handlePlay} className="absolute inset-0 w-full h-full group focus:outline-none">
-              <Image
-                src={thumbnailUrl}
-                alt={video.chapterName}
-                layout="fill"
-                objectFit="cover"
-                priority
-              />
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 opacity-100 group-hover:opacity-100 transition-opacity duration-300">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-white" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                  </svg>
-              </div>
-            </button>
-          ) : (
-            <p className="text-gray-500 text-sm">No image available</p>
-          )
+   return (
+    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      {/* Video Player / Thumbnail */}
+      <div className="relative w-full aspect-video">
+        {videoId && (
+          // ✅ FIX: Use 'query' property instead of 'state'
+          <Link
+            href={{
+              pathname: `/videos/${videoId}`,
+              query: {
+                chapterName: video.chapterName,
+                className: video.className,
+                subjectName: video.subjectName,
+                
+              },
+            }}
+            className="relative w-full h-full group focus:outline-none flex items-center justify-center"
+          >
+            <img
+              src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+              alt="Video Thumbnail"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <FaPlayCircle className="relative z-10 text-white text-6xl opacity-80 group-hover:opacity-100 transition duration-300 transform group-hover:scale-110" />
+          </Link>
         )}
       </div>
-      <div className="flex-1 p-5 flex flex-col justify-between">
-        <div>
-          <h3 className="text-xl font-bold text-gray-800 truncate">{video.chapterName}</h3>
-          <p className="text-gray-500 text-sm mt-1">
-            Chapter {video.chapterNumber} (Class {video.className})
-          </p>
-        </div>
-        <div className="mt-4 flex space-x-2">
-            <Link 
-                href={video.youtubeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 px-4 py-2 border border-blue-600 text-blue-600 rounded-md text-sm font-semibold text-center hover:bg-blue-100 transition-colors duration-300"
+
+      {/* Video Info */}
+      <div className="p-4">
+        <p className="text-sm font-semibold text-blue-600 mb-1">
+          Class {video.className} {video.subjectName ? `| ${video.subjectName}` : ''} | Chapter {video.chapterNumber}
+        </p>
+        <h3 className="text-xl font-bold text-gray-800 line-clamp-2">{video.chapterName}</h3>
+
+        {/* Description with Read More / Less */}
+        {video.description && (
+          <>
+            <p
+              ref={descriptionRef}
+              className={`text-gray-600 text-sm mt-2 whitespace-pre-line ${!isExpanded && isTruncated ? 'line-clamp-2' : ''}`}
             >
-                Watch on YouTube
-            </Link>
+              {video.description}
+            </p>
+            {isTruncated && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-blue-600 hover:underline flex items-center mt-2 text-sm"
+              >
+                {isExpanded ? (
+                  <>
+                    Read Less <BiChevronUp className="ml-1" />
+                  </>
+                ) : (
+                  <>
+                    Read More <BiChevronDown className="ml-1" />
+                  </>
+                )}
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Action Buttons */}
+        <div className="mt-4 flex gap-2">
+          {/* The existing Link is fine as it opens in a new tab */}
+          <Link
+            href={video.youtubeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 px-4 py-2 border border-blue-600 text-blue-600 rounded-md text-sm font-semibold text-center hover:bg-blue-100 transition-colors duration-300"
+          >
+            Watch on YouTube
+          </Link>
           {isAdmin && (
             <button
               onClick={onDelete}
@@ -549,5 +516,4 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
         </div>
       </div>
     </div>
-  );
-}
+  )}

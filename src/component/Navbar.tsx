@@ -58,6 +58,7 @@ export default function Navbar() {
           <ul className="hidden md:flex gap-6 items-center font-medium">
             <li><Link href="/">Home</Link></li>
             <li><Link href="/notes">Notes</Link></li>
+            <li><Link href="/videos">Videos</Link></li>
             <li><Link href="/about">About</Link></li>
             <li><Link href="/contact">Contact</Link></li>
           </ul>
@@ -88,6 +89,7 @@ export default function Navbar() {
           <ul className="flex flex-col gap-3 text-gray-700 font-medium">
             <li><Link href="/" onClick={() => setMenuOpen(false)}>Home</Link></li>
             <li><Link href="/notes" onClick={() => setMenuOpen(false)}>Notes</Link></li>
+            <li><Link href="/videos" onClick={() => setMenuOpen(false)}>Videos</Link></li> {/* ✅ Added Videos Link */}
             <li><Link href="/about" onClick={() => setMenuOpen(false)}>About</Link></li>
             <li><Link href="/contact" onClick={() => setMenuOpen(false)}>Contact</Link></li>
             <li>
