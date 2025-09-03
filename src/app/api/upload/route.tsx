@@ -8,6 +8,39 @@ cloudinary.v2.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+interface CloudinaryResource {
+  secure_url: string;
+  public_id: string;
+  metadata?: {
+    className?: string;
+    subjectName?: string;
+    chapterName?: string;
+    chapterNumber?: string;
+    descriptionImages?: string;
+    descriptionImageCount?: number;
+  };
+  created_at: string;
+}
+
+interface CloudinaryImageResult {
+  secure_url: string;
+  public_id: string;
+  // Add other properties if you need them
+}
+
+interface CloudinaryPDFResult {
+  secure_url: string;
+  public_id: string;
+  metadata: {
+    className: string;
+    subjectName: string;
+    chapterName: string;
+    chapterNumber: string;
+    descriptionImages: string;
+    descriptionImageCount: number;
+  };
+}
+
 // MODIFIED: GET handler to fetch notes with pagination
 // MODIFIED: GET handler to fetch notes with pagination
 export const GET = async (req: NextRequest) => {
@@ -25,9 +58,9 @@ export const GET = async (req: NextRequest) => {
       .next_cursor(nextCursor)
       .execute();
 
-    const notes = resources.map((resource: any) => {
+    const notes = resources.map((resource: CloudinaryResource) => {
       const descriptionImages = resource.metadata?.descriptionImages ? JSON.parse(resource.metadata.descriptionImages) : [];
-      
+
       return {
         url: resource.secure_url,
         publicId: resource.public_id,
@@ -64,52 +97,55 @@ export const POST = async (req: NextRequest) => {
     const chapterName = (formData.get("chapterName") || "") as string;
     const className = (formData.get("className") || "") as string;
     const subjectName = (formData.get("subjectName") || "") as string;
-    
+
     // CHANGES MADE:
     // Ab hum 'description' ki jagah 'images' naam se multiple files expect kar rahe hain.
-    const images = formData.getAll("images") as File[]; 
-    
+    const images = formData.getAll("images") as File[];
+
     if (!file) {
       return NextResponse.json({ message: "No PDF file uploaded" }, { status: 400 });
     }
-    
+
     // CHANGES MADE:
     // Images upload karne ke liye naya logic.
     const uploadedImageUrls: string[] = [];
-    
+
     // Agar images upload hui hain, toh unhe Cloudinary par upload karo
     if (images && images.length > 0) {
       for (const image of images) {
         const imageArrayBuffer = await image.arrayBuffer();
         const imageBuffer = new Uint8Array(imageArrayBuffer);
-        
-        const imageResult: any = await new Promise((resolve, reject) => {
-          cloudinary.v2.uploader
-            .upload_stream(
-              {
-                folder: "note-images", // Images ke liye naya folder
-                resource_type: "image"
-              },
-              function (error, result) {
-                if (error) {
-                  console.error("Cloudinary image upload stream error:", error);
-                  reject(error);
-                  return;
-                }
-                resolve(result);
+
+        const imageResult: CloudinaryImageResult = await new Promise((resolve, reject) => {
+          cloudinary.v2.uploader.upload_stream(
+            {
+              folder: "note-images",
+              resource_type: "image"
+            },
+            function (error, result) {
+              if (error) {
+                console.error("Cloudinary image upload stream error:", error);
+                reject(error);
+                return;
               }
-            )
-            .end(imageBuffer);
+              // Check if result is not undefined before resolving
+              if (result) {
+                resolve(result);
+              } else {
+                reject(new Error("Cloudinary result is undefined."));
+              }
+            }
+          ).end(imageBuffer);
         });
         uploadedImageUrls.push(imageResult.secure_url);
       }
     }
-    
+
     // Main PDF file upload ka logic
     const pdfArrayBuffer = await file.arrayBuffer();
     const pdfBuffer = new Uint8Array(pdfArrayBuffer);
 
-   const pdfResult: any = await new Promise((resolve, reject) => {
+  const pdfResult: CloudinaryPDFResult = await new Promise((resolve, reject) => {
   cloudinary.v2.uploader
     .upload_stream(
       {
@@ -121,21 +157,27 @@ export const POST = async (req: NextRequest) => {
           chapterName: chapterName,
           chapterNumber: chapterNumber,
           descriptionImages: JSON.stringify(uploadedImageUrls),
-          // NEW: Store the total number of images
-          descriptionImageCount: uploadedImageUrls.length, 
+          descriptionImageCount: uploadedImageUrls.length,
         },
       },
-          function (error, result) {
-            if (error) {
-              console.error("Cloudinary upload stream error:", error);
-              reject(error);
-              return;
-            }
-            resolve(result);
-          }
-        )
-        .end(pdfBuffer);
-    });
+      function (error, result) {
+        if (error) {
+          console.error("Cloudinary upload stream error:", error);
+          reject(error);
+          return;
+        }
+
+        // Check if result is not undefined before resolving
+        if (result) {
+          // Type assertion to resolve the incompatibility error
+          resolve(result as CloudinaryPDFResult);
+        } else {
+          reject(new Error("Cloudinary result is undefined."));
+        }
+      }
+    )
+    .end(pdfBuffer);
+});
 
     return NextResponse.json({ success: true, data: pdfResult }, { status: 200 });
   } catch (error) {

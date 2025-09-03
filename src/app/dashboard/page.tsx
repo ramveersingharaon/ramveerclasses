@@ -9,10 +9,16 @@ import React from "react";
 const classes = ['6', '7', '8', '9', '10', '11', '12'];
 const subjects = ['Math', 'Science', 'Physics', 'Chemistry'];
 
+// API responses के लिए एक interface define करें ताकि 'any' error fix हो जाए
+interface UploadResponse {
+  message?: string;
+  error?: string;
+}
+
 // Main Dashboard component
 export default function DashboardPage() {
   const router = useRouter();
-
+  
   // Modal states
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -24,9 +30,7 @@ export default function DashboardPage() {
   const [noteClassName, setNoteClassName] = useState(classes[0]);
   const [noteSubjectName, setNoteSubjectName] = useState(subjects[0]);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  // CHANGES MADE:
-  // noteDescription ko noteImages se replace kar diya, aur initial state ek empty array hai.
-  const [noteImages, setNoteImages] = useState<File[]>([]);
+  const [noteImages, setNoteImages] = useState<File[]>([]); 
 
   // Video form states
   const [videoChapterName, setVideoChapterName] = useState("");
@@ -55,14 +59,9 @@ export default function DashboardPage() {
   // Uploads a new note PDF file
   const uploadNote = async (e: React.FormEvent) => {
     e.preventDefault();
-    // CHANGES MADE:
-    // Ab hum pdfFile aur noteImages dono check kar rahe hain.
     if (!pdfFile || !noteChapterName || !noteChapterNumber || !noteClassName || !noteSubjectName) {
       return alert("All fields and a PDF file are required!");
     }
-    // CHANGES MADE:
-    // Description field ab optional nahi raha agar aap images upload karna chahte hain.
-    // If you want to make the image upload optional, you can remove this part.
     if (noteImages.length === 0) {
       return alert("Please upload at least one image!");
     }
@@ -75,13 +74,9 @@ export default function DashboardPage() {
     formData.append("chapterNumber", noteChapterNumber);
     formData.append("className", noteClassName);
     formData.append("subjectName", noteSubjectName);
-    // CHANGES MADE:
-    // noteDescription ki jagah noteImages ko append kar rahe hain.
-    // Har image file ko ek loop me append kiya jayega.
-    noteImages.forEach((image, index) => {
+    noteImages.forEach((image) => {
       formData.append(`images`, image);
     });
-
 
     try {
       const res = await fetch("/api/upload", {
@@ -90,7 +85,8 @@ export default function DashboardPage() {
       });
 
       console.log(res)
-      const data = await res.json();
+      // CHANGES MADE: data का type 'UploadResponse' set किया
+      const data: UploadResponse = await res.json();
       setLoading(false);
 
       if (res.ok) {
@@ -101,15 +97,14 @@ export default function DashboardPage() {
         setNoteClassName(classes[0]);
         setNoteSubjectName(subjects[0]);
         setPdfFile(null);
-        // CHANGES MADE:
-        // noteDescription ko noteImages se replace kiya.
-        setNoteImages([]);
+        setNoteImages([]); 
       } else {
         alert("Upload failed: " + (data.message || JSON.stringify(data)));
       }
-    } catch (error: any) {
+    } catch (error: unknown) { // CHANGES MADE: error का type 'any' से 'unknown' किया
       console.error("Upload error:", error);
-      alert("Something went wrong during upload: " + (error.message || JSON.stringify(error)));
+      // error.message को सुरक्षित रूप से access करने के लिए type guard का उपयोग करें
+      alert("Something went wrong during upload: " + ((error as Error).message || JSON.stringify(error)));
       setLoading(false);
     }
   };
@@ -120,8 +115,7 @@ export default function DashboardPage() {
     if (!youtubeUrl || !videoChapterName || !videoChapterNumber || !videoClassName || !videoSubjectName) {
       return alert("All fields are required!");
     }
-
-    // Create a FormData object as discussed previously to fix the error
+    
     const formData = new FormData();
     formData.append("youtubeUrl", youtubeUrl);
     formData.append("chapterName", videoChapterName);
@@ -138,7 +132,8 @@ export default function DashboardPage() {
         body: formData,
       });
 
-      const data = await res.json();
+      // CHANGES MADE: data का type 'UploadResponse' set किया
+      const data: UploadResponse = await res.json();
       setLoading(false);
 
       if (res.ok) {
@@ -153,9 +148,10 @@ export default function DashboardPage() {
       } else {
         alert("Video upload failed: " + (data.error || JSON.stringify(data)));
       }
-    } catch (error: any) {
+    } catch (error: unknown) { // CHANGES MADE: error का type 'any' से 'unknown' किया
       console.error("Video upload error:", error);
-      alert("Something went wrong during video upload: " + (error.message || JSON.stringify(error)));
+      // error.message को सुरक्षित रूप से access करने के लिए type guard का उपयोग करें
+      alert("Something went wrong during video upload: " + ((error as Error).message || JSON.stringify(error)));
       setLoading(false);
     }
   };
@@ -186,20 +182,18 @@ export default function DashboardPage() {
           Add Video
         </button>
       </div>
-
+      
       {/* Note Modal */}
       {showNoteModal && (
         <Modal title="Add New Note" onClose={() => setShowNoteModal(false)}>
           <form onSubmit={uploadNote} className="space-y-4">
             <Input label="Chapter Number" value={noteChapterNumber} onChange={setNoteChapterNumber} />
             <Input label="Chapter Name" value={noteChapterName} onChange={setNoteChapterName} />
-            {/* CHANGES MADE: */}
-            {/* Textarea component ko FileInput se replace kiya aur "multiple" attribute add kiya. */}
-            <FileInput
-              label="Description"
-              accept="image/*"
-              onChange={(files) => setNoteImages(files || [])}
-              multiple={true}
+            <FileInput 
+              label="Description" 
+              accept="image/*" 
+              onChange={(files) => setNoteImages(files || [])} 
+              multiple={true} 
             />
             <div className="flex gap-4">
               <div className="flex-1">
@@ -326,8 +320,6 @@ function Textarea({ label, value, onChange, rows = 4 }: { label: string; value: 
   );
 }
 
-// CHANGES MADE:
-// FileInput component ko multiple files handle karne ke liye update kiya.
 function FileInput({ label, accept, onChange, multiple = false }: { label: string; accept: string; onChange: (files: File[] | null) => void; multiple?: boolean; }) {
   return (
     <div>
@@ -335,7 +327,7 @@ function FileInput({ label, accept, onChange, multiple = false }: { label: strin
       <input
         type="file"
         accept={accept}
-        multiple={multiple} // multiple prop ko yahan use kiya hai
+        multiple={multiple}
         onChange={(e) => onChange(e.target.files ? Array.from(e.target.files) : null)}
         className="w-full px-3 py-2 border rounded text-gray-900"
         required
