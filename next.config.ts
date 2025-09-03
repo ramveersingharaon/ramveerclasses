@@ -1,22 +1,10 @@
-// // next.config.js
-// /** @type {import('next').NextConfig} */
-// const nextConfig = {
-//   images: {
-//     domains: ['res.cloudinary.com'],
-//   },
-// };
-
-// module.exports = nextConfig;
+// next.config.js
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'res.cloudinary.com',
-      },
-    ],
+    domains: ["img.youtube.com", "res.cloudinary.com"],
   },
 };
+
 module.exports = nextConfig;
