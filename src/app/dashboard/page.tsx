@@ -12,7 +12,7 @@ const subjects = ['Math', 'Science', 'Physics', 'Chemistry'];
 // Main Dashboard component
 export default function DashboardPage() {
   const router = useRouter();
-  
+
   // Modal states
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -26,7 +26,7 @@ export default function DashboardPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   // CHANGES MADE:
   // noteDescription ko noteImages se replace kar diya, aur initial state ek empty array hai.
-  const [noteImages, setNoteImages] = useState<File[]>([]); 
+  const [noteImages, setNoteImages] = useState<File[]>([]);
 
   // Video form states
   const [videoChapterName, setVideoChapterName] = useState("");
@@ -79,7 +79,7 @@ export default function DashboardPage() {
     // noteDescription ki jagah noteImages ko append kar rahe hain.
     // Har image file ko ek loop me append kiya jayega.
     noteImages.forEach((image, index) => {
-        formData.append(`images`, image);
+      formData.append(`images`, image);
     });
 
 
@@ -103,7 +103,7 @@ export default function DashboardPage() {
         setPdfFile(null);
         // CHANGES MADE:
         // noteDescription ko noteImages se replace kiya.
-        setNoteImages([]); 
+        setNoteImages([]);
       } else {
         alert("Upload failed: " + (data.message || JSON.stringify(data)));
       }
@@ -120,7 +120,7 @@ export default function DashboardPage() {
     if (!youtubeUrl || !videoChapterName || !videoChapterNumber || !videoClassName || !videoSubjectName) {
       return alert("All fields are required!");
     }
-    
+
     // Create a FormData object as discussed previously to fix the error
     const formData = new FormData();
     formData.append("youtubeUrl", youtubeUrl);
@@ -186,7 +186,7 @@ export default function DashboardPage() {
           Add Video
         </button>
       </div>
-      
+
       {/* Note Modal */}
       {showNoteModal && (
         <Modal title="Add New Note" onClose={() => setShowNoteModal(false)}>
@@ -195,7 +195,12 @@ export default function DashboardPage() {
             <Input label="Chapter Name" value={noteChapterName} onChange={setNoteChapterName} />
             {/* CHANGES MADE: */}
             {/* Textarea component ko FileInput se replace kiya aur "multiple" attribute add kiya. */}
-            <FileInput label="Description" accept="image/*" onChange={setNoteImages} multiple={true} />
+            <FileInput
+              label="Description"
+              accept="image/*"
+              onChange={(files) => setNoteImages(files || [])}
+              multiple={true}
+            />
             <div className="flex gap-4">
               <div className="flex-1">
                 <label className="block mb-1 font-semibold text-gray-900">Class</label>
