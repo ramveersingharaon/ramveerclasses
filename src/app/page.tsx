@@ -1,13 +1,14 @@
+// src/app/page.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { app } from '../../firebaseConfig';
-import { IoIosArrowBack, IoIosArrowForward } from 'react-icons/io';
 import { FaPlayCircle } from 'react-icons/fa';
 import { BiChevronDown, BiChevronUp } from 'react-icons/bi';
+// Import `Image` component here if you intend to use it, otherwise remove it
+import Image from 'next/image';
 
 // Define a union type for different content types
 type Content = Note | Video;
@@ -57,12 +58,13 @@ export default function HomePage() {
 
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [activeTypeFilter, setActiveTypeFilter] = useState<string>('all');
+  const [activeTypeFilter, setActiveTypeFilter] = useState<string>('all')
   const [activeClassFilter, setActiveClassFilter] = useState<string>('all');
   const [activeSubjectFilter, setActiveSubjectFilter] = useState<string>('all');
 
-  const [availableClasses, setAvailableClasses] = useState<string[]>([]);
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  // These state variables are not being used in your code, so I'm commenting them out to fix the error.
+  // const [availableClasses, setAvailableClasses] = useState<string[]>([]);
+  // const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
 
   useEffect(() => {
     const auth = getAuth(app);
@@ -72,7 +74,6 @@ export default function HomePage() {
     return () => unsubscribe();
   }, []);
 
-  // 🚀 UPDATED: fetchContent with separate cursors
   const fetchContent = useCallback(async () => {
     if (loading || (!nextNotesCursor && !nextVideosCursor && !hasMore)) return;
 
@@ -105,10 +106,15 @@ export default function HomePage() {
         const combinedContent = [...prevContent, ...newFetchedContent];
         const sortedContent = combinedContent.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         const uniqueContent = sortedContent.filter((item, index, self) =>
-          index === self.findIndex(t => (
-            (t.type === 'note' && item.type === 'note' && t.publicId === item.publicId) ||
-            (t.type === 'video' && item.type === 'video' && t.youtubeUrl === item.youtubeUrl)
-          ))
+          index === self.findIndex(t => {
+            if (t.type === 'note' && item.type === 'note') {
+              return t.publicId === item.publicId;
+            }
+            if (t.type === 'video' && item.type === 'video') {
+              return t.youtubeUrl === item.youtubeUrl;
+            }
+            return false;
+          })
         );
         return uniqueContent;
       });
@@ -124,7 +130,7 @@ export default function HomePage() {
   // Initial fetch on component mount
   useEffect(() => {
     fetchContent();
-  }, []);
+  }, [fetchContent]); // Fixed: Added fetchContent to dependency array
 
   // IntersectionObserver logic to trigger fetch on scroll
   useEffect(() => {
@@ -154,7 +160,7 @@ export default function HomePage() {
     setHasMore(true);
     // fetchContent is triggered by the change in cursor states
   }, [activeTypeFilter, activeClassFilter, activeSubjectFilter]);
-  
+
   // 🚀 NEW: handleDelete functions
   const handleDeleteNote = async (note: Note) => {
     if (!isAdmin || !note.publicId) return;
@@ -168,7 +174,12 @@ export default function HomePage() {
         if (response.ok) {
           alert("Note deleted successfully!");
           // UI se note ko hatayein
-          setContent(prevContent => prevContent.filter(item => item.type === 'video' || (item.type === 'note' && item.publicId !== note.publicId)));
+          setContent(prevContent => prevContent.filter(item => {
+            if (item.type === 'note') {
+              return item.publicId !== note.publicId;
+            }
+            return true;
+          }));
         } else {
           const errorData = await response.json();
           alert(`Error deleting note: ${errorData.message}`);
@@ -196,7 +207,12 @@ export default function HomePage() {
         if (response.ok) {
           alert("Video deleted successfully!");
           // UI se video ko hatayein
-          setContent(prevContent => prevContent.filter(item => item.type === 'note' || (item.type === 'video' && item.thumbnailPublicId !== video.thumbnailPublicId)));
+          setContent(prevContent => prevContent.filter(item => {
+            if (item.type === 'video') {
+              return item.thumbnailPublicId !== video.thumbnailPublicId;
+            }
+            return true;
+          }));
         } else {
           const errorData = await response.json();
           alert(`Error deleting video: ${errorData.message}`);
@@ -264,9 +280,11 @@ export default function HomePage() {
               className="px-4 py-2 text-sm font-semibold rounded-full bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
               <option value="all">All Classes</option>
-              {availableClasses.map(cls => (
+              {/* `availableClasses` is not being set anywhere. */}
+              {/* If you want to use this, you'll need to fetch class data from an API or a different source. */}
+              {/* {availableClasses.map(cls => (
                 <option key={cls} value={cls}>Class {cls}th</option>
-              ))}
+              ))} */}
             </select>
 
             {activeClassFilter !== 'all' && (
@@ -276,9 +294,11 @@ export default function HomePage() {
                 className="px-4 py-2 text-sm font-semibold rounded-full bg-white text-blue-600 border-2 border-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-600"
               >
                 <option value="all">All Subjects</option>
-                {availableSubjects.map(subject => (
+                {/* `availableSubjects` is not being set anywhere. */}
+                {/* If you want to use this, you'll need to fetch subject data from an API or a different source. */}
+                {/* {availableSubjects.map(subject => (
                   <option key={subject} value={subject}>{subject}</option>
-                ))}
+                ))} */}
               </select>
             )}
           </div>
@@ -288,7 +308,7 @@ export default function HomePage() {
               <div key={index}>
                 {item.type === 'note' ? (
                   // onDelete prop ko updated function se badla
-                  <NoteCard note={item as Note} isAdmin={isAdmin} onDelete={() => handleDeleteNote(item as Note)} onDownload={() => { }} />
+                  <NoteCard note={item as Note} isAdmin={isAdmin} onDelete={() => handleDeleteNote(item as Note)} onDownload={() => {}} />
                 ) : (
                   // onDelete prop ko updated function se badla
                   <VideoCard video={item as Video} isAdmin={isAdmin} onDelete={() => handleDeleteVideo(item as Video)} />
@@ -353,10 +373,14 @@ function NoteCard({ note, isAdmin, onDelete, onDownload }: { note: Note, isAdmin
           <div className="flex flex-col gap-2">
             {allImages.map((imageUrl, index) => (
               <div key={index} className="relative w-full">
-                <img
+                {/* Fixed: Replaced `<img>` with `Image` component. */}
+                <Image
                   src={imageUrl}
                   alt={`Note image ${index + 1}`}
                   className="w-full h-auto object-contain"
+                  layout="responsive"
+                  width={600} // Add appropriate width
+                  height={400} // Add appropriate height
                 />
               </div>
             ))}
@@ -431,12 +455,11 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
 
   const videoId = getYouTubeId(video.youtubeUrl);
 
-   return (
+    return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       {/* Video Player / Thumbnail */}
       <div className="relative w-full aspect-video">
         {videoId && (
-          // ✅ FIX: Use 'query' property instead of 'state'
           <Link
             href={{
               pathname: `/videos/${videoId}`,
@@ -449,10 +472,11 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
             }}
             className="relative w-full h-full group focus:outline-none flex items-center justify-center"
           >
-            <img
+            <Image
               src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
               alt="Video Thumbnail"
               className="absolute inset-0 w-full h-full object-cover"
+              layout="fill"
             />
             <FaPlayCircle className="relative z-10 text-white text-6xl opacity-80 group-hover:opacity-100 transition duration-300 transform group-hover:scale-110" />
           </Link>
@@ -466,7 +490,6 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
         </p>
         <h3 className="text-xl font-bold text-gray-800 line-clamp-2">{video.chapterName}</h3>
 
-        {/* Description with Read More / Less */}
         {video.description && (
           <>
             <p
@@ -496,7 +519,6 @@ function VideoCard({ video, isAdmin, onDelete }: { video: Video, isAdmin: boolea
 
         {/* Action Buttons */}
         <div className="mt-4 flex gap-2">
-          {/* The existing Link is fine as it opens in a new tab */}
           <Link
             href={video.youtubeUrl}
             target="_blank"

@@ -1,10 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import Image from "next/image"; // ✅ Link component is now removed
+import Image from "next/image"; // Add back for optimization
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { app } from '../../../firebaseConfig';
-import { FaDownload } from 'react-icons/fa';
 import { BiChevronDown, BiChevronUp } from "react-icons/bi";
 
 // Define the Note type
@@ -58,7 +57,8 @@ export default function HomePage() {
       const notesRes = await fetch(notesUrl);
       const notesData = notesRes.ok ? await notesRes.json() : null;
 
-      const notesArray: Note[] = Array.isArray(notesData?.notes) ? notesData.notes.map((item: any) => ({ ...item, type: 'note' })) : [];
+      // Fix: 'any' replaced with explicit type 'Note'
+      const notesArray: Note[] = Array.isArray(notesData?.notes) ? notesData.notes.map((item: Note) => ({ ...item, type: 'note' })) : [];
 
       setNextNotesCursor(notesData?.nextCursor || null);
       setHasMore(!!notesData?.nextCursor);
@@ -83,7 +83,7 @@ export default function HomePage() {
   // Initial fetch on component mount
   useEffect(() => {
     fetchContent();
-  }, []);
+  }, [fetchContent]); // Fix: Added 'fetchContent' to dependency array
 
   // IntersectionObserver logic to trigger fetch on scroll
   useEffect(() => {
@@ -197,7 +197,7 @@ export default function HomePage() {
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-6">
-        {filteredContent.map((note, index) => (
+        {filteredContent.map((note) => (
           <NoteCard
             key={note.publicId}
             note={note}
@@ -224,6 +224,7 @@ export default function HomePage() {
 }
 
 // Reusable Card Components
+/// Reusable Card Components
 function NoteCard({ note, isAdmin, onDelete, onDownload }: { note: Note, isAdmin: boolean, onDelete: () => void, onDownload: (url: string, chapterName: string) => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [allImages, setAllImages] = useState<string[]>(note.descriptionImages?.slice(0, 1) || []);
@@ -260,14 +261,18 @@ function NoteCard({ note, isAdmin, onDelete, onDownload }: { note: Note, isAdmin
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col transform transition-transform duration-300 hover:scale-[1.01] hover:shadow-2xl">
       {allImages && allImages.length > 0 && (
-        <div className="relative w-full overflow-hidden bg-gray-200 p-2">
+        <div className="relative w-full overflow-hidden bg-gray-200">
           <div className="flex flex-col gap-2">
-            {allImages.map((imageUrl, index) => (
-              <div key={index} className="relative w-full">
-                <img
+            {allImages.map((imageUrl) => (
+              // CHANGES MADE: Reverted to a more direct approach for sizing.
+              <div key={imageUrl} className="relative w-full h-auto">
+                <Image
                   src={imageUrl}
-                  alt={`Note image ${index + 1}`}
-                  className="w-full h-auto object-contain"
+                  alt={`Note image`}
+                  width={600}
+                  height={400} 
+                  style={{ objectFit: 'contain', width: '100%', height: 'auto' }}
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 />
               </div>
             ))}
@@ -319,4 +324,5 @@ function NoteCard({ note, isAdmin, onDelete, onDownload }: { note: Note, isAdmin
         </div>
       </div>
     </div>
-  )}
+  )
+}
