@@ -62,7 +62,6 @@ export default function VideosPage() {
 
     setLoading(true);
     try {
-      // ✅ Improved URL building using URLSearchParams for robustness
       const params = new URLSearchParams({
         limit: '3',
       });
@@ -81,18 +80,15 @@ export default function VideosPage() {
       const data = await res.json();
 
       if (data?.videos && Array.isArray(data.videos)) {
-        const newVideos = data.videos.map((video: any) => ({ ...video, type: 'video' }) as Video);
+        const newVideos = data.videos.map((video: Video) => ({ ...video, type: 'video' }));
         setVideos(prevVideos => {
           const combinedVideos = [...prevVideos, ...newVideos];
-          // Remove duplicates
           const uniqueVideos = combinedVideos.filter((item, index, self) =>
             index === self.findIndex(t => t.youtubeUrl === item.youtubeUrl)
           );
           return uniqueVideos;
         });
-        // ✅ Update nextCursor state
         setNextCursor(data.nextCursor || null);
-        // ✅ Set hasMore based on the presence of nextCursor
         setHasMore(!!data.nextCursor);
       } else {
         setHasMore(false);
