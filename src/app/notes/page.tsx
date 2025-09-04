@@ -136,15 +136,27 @@ export default function HomePage() {
     }
   };
 
+
+
   // Handle download
-  const handleDownload = (url: string, chapterName: string) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${chapterName}.pdf`; // You can set a default file name
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async (url: string, chapterName: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `${chapterName}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      alert("Failed to download file.");
+      console.error("Download error:", error);
+    }
   };
+
 
   // Filter content based on selected class and subject
   const filteredContent = content.filter(item => {

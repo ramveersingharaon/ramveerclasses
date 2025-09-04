@@ -161,6 +161,25 @@ export default function HomePage() {
     // fetchContent is triggered by the change in cursor states
   }, [activeTypeFilter, activeClassFilter, activeSubjectFilter]);
 
+const handleDownload = async (url: string, chapterName: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', `${chapterName}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      alert("Failed to download file.");
+      console.error("Download error:", error);
+    }
+  };
+
+
   // 🚀 NEW: handleDelete functions
   const handleDeleteNote = async (note: Note) => {
     if (!isAdmin || !note.publicId) return;
@@ -308,7 +327,7 @@ export default function HomePage() {
               <div key={index}>
                 {item.type === 'note' ? (
                   // onDelete prop ko updated function se badla
-                  <NoteCard note={item as Note} isAdmin={isAdmin} onDelete={() => handleDeleteNote(item as Note)} onDownload={() => {}} />
+                   <NoteCard note={item as Note} isAdmin={isAdmin} onDelete={() => handleDeleteNote(item)} onDownload={handleDownload} />
                 ) : (
                   // onDelete prop ko updated function se badla
                   <VideoCard video={item as Video} isAdmin={isAdmin} onDelete={() => handleDeleteVideo(item as Video)} />
