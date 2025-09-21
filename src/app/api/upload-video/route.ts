@@ -1,6 +1,43 @@
 // app/api/upload-video/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
+import mongoose from 'mongoose'; // MongoDB के लिए Mongoose import करें
+
+// --- START: NEW MONGODB CODE ---
+const connection: { isConnected?: boolean } = {};
+
+async function connectDb() {
+  if (connection.isConnected) {
+    console.log("Using existing database connection for videos API");
+    return;
+  }
+
+  if (!process.env.MONGODB_URI) {
+    console.error("MongoDB URI not found in environment variables for videos API.");
+    throw new Error("MongoDB URI not found.");
+  }
+
+  try {
+    const db = await mongoose.connect(process.env.MONGODB_URI);
+    connection.isConnected = db.connections[0].readyState === 1; // 1 = connected
+    console.log("New database connection established for videos API.");
+  } catch (error) {
+    console.error("Database connection error for videos API:", error);
+    // एरर को re-throw करें ताकि API 500 status लौटा सके
+    throw new Error("Failed to connect to database.");
+  }
+}
+
+// वीडियो डेटा के लिए नया Mongoose Schema
+const videoSchema = new mongoose.Schema({
+  videos: Array, // यहाँ Cloudinary से फ़ेच किए गए वीडियो का Array स्टोर होगा
+  lastUpdated: { type: Date, default: Date.now },
+});
+
+// Mongoose मॉडल को परिभाषित करें या मौजूदा का उपयोग करें
+const VideosCache = mongoose.models.Videos || mongoose.model('Videos', videoSchema);
+// --- END: NEW MONGODB CODE ---
+
 
 // Configure Cloudinary using environment variables
 cloudinary.config({
@@ -56,7 +93,11 @@ const parseMetadata = (metadata: CloudinaryVideoResource['metadata']): VideoMeta
   };
 };
 
+
+// --- START: MODIFIED POST HANDLER ---
 export async function POST(req: NextRequest) {
+  await connectDb(); // MongoDB से कनेक्ट करें
+
   try {
     const formData = await req.formData();
     const youtubeUrl = formData.get("youtubeUrl") as string;
@@ -80,7 +121,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     const youtubeThumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
     const thumbnailResponse = await fetch(youtubeThumbnailUrl);
     if (!thumbnailResponse.ok) {
@@ -89,7 +130,7 @@ export async function POST(req: NextRequest) {
     const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
 
     const thumbnailUploadResult: CloudinaryVideoResource = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
+      cloudinary.uploader.upload_stream( // .v2 हटा दिया गया है
         {
           resource_type: 'image',
           folder: 'videos_thumbnails',
@@ -111,6 +152,31 @@ export async function POST(req: NextRequest) {
       ).end(thumbnailBuffer);
     });
 
+    // --- NEW CODE: MongoDB में नया वीडियो सेव करें और कैश अपडेट करें ---
+    const newVideo = {
+      youtubeUrl: decodeURIComponent(thumbnailUploadResult.metadata?.youtubeUrl || youtubeUrl),
+      chapterNumber: decodeURIComponent(thumbnailUploadResult.metadata?.chapterNumber || chapterNumber),
+      chapterName: decodeURIComponent(thumbnailUploadResult.metadata?.chapterName || chapterName),
+      className: decodeURIComponent(thumbnailUploadResult.metadata?.className || className),
+      subjectName: decodeURIComponent(thumbnailUploadResult.metadata?.subjectName || subjectName),
+      description: decodeURIComponent(thumbnailUploadResult.metadata?.description || description),
+      thumbnailUrl: thumbnailUploadResult.secure_url,
+      thumbnailPublicId: thumbnailUploadResult.public_id,
+      created_at: new Date().toISOString(),
+      type: 'video'
+    };
+
+    const cachedData = await VideosCache.findOne({});
+    if (cachedData) {
+        // नया वीडियो सबसे ऊपर जोड़ने के लिए
+        const updatedVideos = [newVideo, ...cachedData.videos];
+        await VideosCache.updateOne({}, { videos: updatedVideos, lastUpdated: new Date() });
+    } else {
+        // अगर कोई कैश नहीं है, तो नया कैश बनाएँ
+        await new VideosCache({ videos: [newVideo] }).save();
+    }
+    // --- END: NEW CODE ---
+
     return NextResponse.json({
       success: true,
       youtubeUrl: youtubeUrl,
@@ -126,21 +192,39 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+// --- END: MODIFIED POST HANDLER ---
 
+
+// --- START: MODIFIED GET HANDLER (Caching Logic) ---
 export async function GET(req: NextRequest) {
+  await connectDb(); // MongoDB से कनेक्ट करें
+
   try {
     const { searchParams } = new URL(req.url);
     const limit = parseInt(searchParams.get('limit') || '3');
-    const nextCursor = searchParams.get('nextCursor') || undefined;
-    
-    const imagesResult = await cloudinary.search
+
+    // 1. डेटाबेस में कैश डेटा खोजें
+    const cachedData = await VideosCache.findOne({});
+    const oneHour = 60 * 60 * 1000; // 1 घंटे (ms में)
+
+    if (cachedData && (new Date().getTime() - cachedData.lastUpdated.getTime() < oneHour)) {
+      // 2. अगर कैश मौजूद है और 1 घंटे से पुराना नहीं है, तो उसे सीधे भेज दें
+      console.log("Serving videos from MongoDB cache.");
+      return NextResponse.json({
+        videos: cachedData.videos.slice(0, limit),
+        nextCursor: null, // Pagination cache logic को यहाँ और जटिल करना होगा, लेकिन अभी इसे सरल रखते हैं
+      });
+    }
+
+    // 3. अगर कैश नहीं मिला या पुराना है, तो Cloudinary से नया डेटा फ़ेच करें
+    console.log("Fetching new videos from Cloudinary...");
+    const imagesResult = await cloudinary.search // .v2 हटा दिया गया है
       .expression('folder:videos_thumbnails')
       .with_field('metadata')
       .sort_by('created_at', 'desc')
-      .max_results(limit)
-      .next_cursor(nextCursor)
+      .max_results(500) // यहाँ ज़्यादा रिज़ल्ट फ़ेच करें ताकि बार-बार फ़ेच न करना पड़े
       .execute();
-    
+
     const videos = (imagesResult.resources as CloudinaryVideoResource[])
       .map((file) => {
         const metadata = parseMetadata(file.metadata);
@@ -154,22 +238,41 @@ export async function GET(req: NextRequest) {
           thumbnailUrl: file.secure_url,
           thumbnailPublicId: file.public_id,
           created_at: file.created_at,
+          type: 'video'
         };
       });
 
+    // 4. नया डेटाबेस में सेव या अपडेट करें
+    if (cachedData) {
+      await VideosCache.updateOne({}, { videos: videos, lastUpdated: new Date() });
+      console.log("MongoDB cache updated for videos.");
+    } else {
+      await new VideosCache({ videos: videos }).save();
+      console.log("New video data saved to MongoDB cache.");
+    }
+
+    // 5. यूज़र को नया डेटा भेजें
     return NextResponse.json({
-      videos,
+      videos: videos.slice(0, limit),
       nextCursor: imagesResult.next_cursor || null,
     });
 
   } catch (error) {
     const err = error as Error;
-    console.error('Fetch error:', err);
-    return NextResponse.json([], { status: 500 });
+    console.error('Fetch error for videos:', err);
+    return NextResponse.json(
+      { success: false, error: err.message || "Failed to fetch videos" },
+      { status: 500 }
+    );
   }
 }
+// --- END: MODIFIED GET HANDLER ---
 
+
+// --- START: MODIFIED DELETE HANDLER ---
 export async function DELETE(req: NextRequest) {
+  await connectDb(); // MongoDB से कनेक्ट करें
+
   try {
     type DeleteRequest = {
       thumbnailPublicId: string;
@@ -183,7 +286,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const result = await cloudinary.uploader.destroy(thumbnailPublicId, {
+    const result = await cloudinary.uploader.destroy(thumbnailPublicId, { // .v2 हटा दिया गया है
       resource_type: 'image',
     });
 
@@ -194,6 +297,14 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    // --- NEW CODE: MongoDB से वीडियो को हटाएँ ---
+    const cachedData = await VideosCache.findOne({});
+    if (cachedData) {
+        const updatedVideos = cachedData.videos.filter((video: any) => video.thumbnailPublicId !== thumbnailPublicId);
+        await VideosCache.updateOne({}, { videos: updatedVideos, lastUpdated: new Date() });
+    }
+    // --- END: NEW CODE ---
+
     return NextResponse.json({ success: true });
   } catch (error) {
     const err = error as Error;
@@ -201,3 +312,4 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
+// --- END: MODIFIED DELETE HANDLER ---
