@@ -3,6 +3,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 import mongoose from 'mongoose'; // MongoDB के लिए Mongoose import करें
 
+// video के लिए एक नया Interface बनाएँ
+interface Video {
+    youtubeUrl: string;
+    chapterNumber: string;
+    chapterName: string;
+    className: string;
+    subjectName: string;
+    description: string;
+    thumbnailUrl: string;
+    thumbnailPublicId: string;
+    created_at: string;
+    type: string;
+}
 // --- START: NEW MONGODB CODE ---
 const connection: { isConnected?: boolean } = {};
 
@@ -204,7 +217,9 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '3');
 
     // 1. डेटाबेस में कैश डेटा खोजें
-    const cachedData = await VideosCache.findOne({});
+    const cachedData = await VideosCache.findOne<{
+      lastUpdated: any; videos: Video[] 
+}>();
     const oneHour = 60 * 60 * 1000; // 1 घंटे (ms में)
 
     if (cachedData && (new Date().getTime() - cachedData.lastUpdated.getTime() < oneHour)) {
@@ -244,12 +259,10 @@ export async function GET(req: NextRequest) {
 
     // 4. नया डेटाबेस में सेव या अपडेट करें
     if (cachedData) {
-      await VideosCache.updateOne({}, { videos: videos, lastUpdated: new Date() });
-      console.log("MongoDB cache updated for videos.");
-    } else {
-      await new VideosCache({ videos: videos }).save();
-      console.log("New video data saved to MongoDB cache.");
-    }
+    await VideosCache.updateOne({}, { videos: videos, lastUpdated: new Date() });
+} else {
+    await new VideosCache({ videos: videos }).save();
+}
 
     // 5. यूज़र को नया डेटा भेजें
     return NextResponse.json({
@@ -300,9 +313,9 @@ export async function DELETE(req: NextRequest) {
     // --- NEW CODE: MongoDB से वीडियो को हटाएँ ---
     const cachedData = await VideosCache.findOne({});
     if (cachedData) {
-        const updatedVideos = cachedData.videos.filter((video: any) => video.thumbnailPublicId !== thumbnailPublicId);
-        await VideosCache.updateOne({}, { videos: updatedVideos, lastUpdated: new Date() });
-    }
+    const updatedVideos = cachedData.videos.filter((video: Video) => video.thumbnailPublicId !== thumbnailPublicId);
+    await VideosCache.updateOne({}, { videos: updatedVideos, lastUpdated: new Date() });
+}
     // --- END: NEW CODE ---
 
     return NextResponse.json({ success: true });

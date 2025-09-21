@@ -250,7 +250,12 @@ export const DELETE = async (req: NextRequest) => {
     // --- NEW CODE: MongoDB से नोट को हटाएँ ---
     const cachedData = await NotesCache.findOne({});
     if (cachedData) {
-        const updatedNotes = cachedData.notes.filter((note: any) => note.publicId !== publicId);
+        const updatedNotes = cachedData.notes.filter((note: unknown) => {
+    if (typeof note === 'object' && note !== null && 'publicId' in note) {
+        return (note as { publicId: string }).publicId !== publicId;
+    }
+    return false;
+});
         await NotesCache.updateOne({}, { notes: updatedNotes, lastUpdated: new Date() });
     }
     // --- END: NEW CODE ---
