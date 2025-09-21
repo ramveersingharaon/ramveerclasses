@@ -1,7 +1,7 @@
 // app/api/upload-video/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
-import mongoose from 'mongoose'; // MongoDB के लिए Mongoose import करें
+import mongoose from 'mongoose';
 
 // video के लिए एक नया Interface बनाएँ
 interface Video {
@@ -36,14 +36,13 @@ async function connectDb() {
     console.log("New database connection established for videos API.");
   } catch (error) {
     console.error("Database connection error for videos API:", error);
-    // एरर को re-throw करें ताकि API 500 status लौटा सके
     throw new Error("Failed to connect to database.");
   }
 }
 
 // वीडियो डेटा के लिए नया Mongoose Schema
 const videoSchema = new mongoose.Schema({
-  videos: Array, // यहाँ Cloudinary से फ़ेच किए गए वीडियो का Array स्टोर होगा
+  videos: { type: [Object], default: [] }, // Array को Object के Array के रूप में परिभाषित करें
   lastUpdated: { type: Date, default: Date.now },
 });
 
@@ -143,7 +142,7 @@ export async function POST(req: NextRequest) {
     const thumbnailBuffer = Buffer.from(await thumbnailResponse.arrayBuffer());
 
     const thumbnailUploadResult: CloudinaryVideoResource = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream( // .v2 हटा दिया गया है
+      cloudinary.uploader.upload_stream(
         {
           resource_type: 'image',
           folder: 'videos_thumbnails',
@@ -166,7 +165,7 @@ export async function POST(req: NextRequest) {
     });
 
     // --- NEW CODE: MongoDB में नया वीडियो सेव करें और कैश अपडेट करें ---
-    const newVideo = {
+    const newVideo: Video = { // newVideo को 'Video' टाइप दिया गया
       youtubeUrl: decodeURIComponent(thumbnailUploadResult.metadata?.youtubeUrl || youtubeUrl),
       chapterNumber: decodeURIComponent(thumbnailUploadResult.metadata?.chapterNumber || chapterNumber),
       chapterName: decodeURIComponent(thumbnailUploadResult.metadata?.chapterName || chapterName),
@@ -179,13 +178,11 @@ export async function POST(req: NextRequest) {
       type: 'video'
     };
 
-    const cachedData = await VideosCache.findOne({});
+    const cachedData = await VideosCache.findOne<{ videos: Video[]; lastUpdated: Date }>(); // Explicitly type cachedData
     if (cachedData) {
-        // नया वीडियो सबसे ऊपर जोड़ने के लिए
-        const updatedVideos = [newVideo, ...cachedData.videos];
+        const updatedVideos: Video[] = [newVideo, ...cachedData.videos]; // Explicitly type updatedVideos
         await VideosCache.updateOne({}, { videos: updatedVideos, lastUpdated: new Date() });
     } else {
-        // अगर कोई कैश नहीं है, तो नया कैश बनाएँ
         await new VideosCache({ videos: [newVideo] }).save();
     }
     // --- END: NEW CODE ---
@@ -217,9 +214,7 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '3');
 
     // 1. डेटाबेस में कैश डेटा खोजें
-    const cachedData = await VideosCache.findOne<{
-      lastUpdated: any; videos: Video[] 
-}>();
+    const cachedData = await VideosCache.findOne<{ videos: Video[]; lastUpdated: Date }>(); // Explicitly type cachedData
     const oneHour = 60 * 60 * 1000; // 1 घंटे (ms में)
 
     if (cachedData && (new Date().getTime() - cachedData.lastUpdated.getTime() < oneHour)) {
@@ -233,14 +228,14 @@ export async function GET(req: NextRequest) {
 
     // 3. अगर कैश नहीं मिला या पुराना है, तो Cloudinary से नया डेटा फ़ेच करें
     console.log("Fetching new videos from Cloudinary...");
-    const imagesResult = await cloudinary.search // .v2 हटा दिया गया है
+    const imagesResult = await cloudinary.search
       .expression('folder:videos_thumbnails')
       .with_field('metadata')
       .sort_by('created_at', 'desc')
       .max_results(500) // यहाँ ज़्यादा रिज़ल्ट फ़ेच करें ताकि बार-बार फ़ेच न करना पड़े
       .execute();
 
-    const videos = (imagesResult.resources as CloudinaryVideoResource[])
+    const videos: Video[] = (imagesResult.resources as CloudinaryVideoResource[]) // Explicitly type videos
       .map((file) => {
         const metadata = parseMetadata(file.metadata);
         return {
@@ -259,10 +254,12 @@ export async function GET(req: NextRequest) {
 
     // 4. नया डेटाबेस में सेव या अपडेट करें
     if (cachedData) {
-    await VideosCache.updateOne({}, { videos: videos, lastUpdated: new Date() });
-} else {
-    await new VideosCache({ videos: videos }).save();
-}
+      await VideosCache.updateOne({}, { videos: videos, lastUpdated: new Date() });
+      console.log("MongoDB cache updated for videos.");
+    } else {
+      await new VideosCache({ videos: videos }).save();
+      console.log("New video data saved to MongoDB cache.");
+    }
 
     // 5. यूज़र को नया डेटा भेजें
     return NextResponse.json({
@@ -299,7 +296,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const result = await cloudinary.uploader.destroy(thumbnailPublicId, { // .v2 हटा दिया गया है
+    const result = await cloudinary.uploader.destroy(thumbnailPublicId, {
       resource_type: 'image',
     });
 
@@ -311,11 +308,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     // --- NEW CODE: MongoDB से वीडियो को हटाएँ ---
-    const cachedData = await VideosCache.findOne({});
+    const cachedData = await VideosCache.findOne<{ videos: Video[]; lastUpdated: Date }>(); // Explicitly type cachedData
     if (cachedData) {
-    const updatedVideos = cachedData.videos.filter((video: Video) => video.thumbnailPublicId !== thumbnailPublicId);
-    await VideosCache.updateOne({}, { videos: updatedVideos, lastUpdated: new Date() });
-}
+        const updatedVideos: Video[] = cachedData.videos.filter((video: Video) => video.thumbnailPublicId !== thumbnailPublicId); // Explicitly type updatedVideos
+        await VideosCache.updateOne({}, { videos: updatedVideos, lastUpdated: new Date() });
+    }
     // --- END: NEW CODE ---
 
     return NextResponse.json({ success: true });
