@@ -1,6 +1,4 @@
 "use client";
-
-import Link from "next/link";
 import Image from "next/image";
 
 export default function AboutPage() {
@@ -77,8 +75,6 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
-
-      <hr className="border-t-2 border-gray-200 my-12" />
 
     </div>
   );
