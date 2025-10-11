@@ -80,20 +80,6 @@ export default function AboutPage() {
 
       <hr className="border-t-2 border-gray-200 my-12" />
 
-      <section className="text-center mt-16">
-        <h2 className="text-2xl font-bold text-blue-700 mb-4">
-          एक नए कल की शुरुआत करें
-        </h2>
-        <p className="text-gray-700 mb-6">
-          आप भी हमारे साथ जुड़ें और अपने सपनों को पूरा करने की दिशा में पहला कदम बढ़ाएं।
-        </p>
-        <Link
-          href="/register"
-          className="inline-block bg-blue-600 text-white px-6 py-3 rounded-md font-medium hover:bg-blue-700 transition"
-        >
-          अभी रजिस्टर करें
-        </Link>
-      </section>
     </div>
   );
 }
